@@ -5,9 +5,19 @@ from dataclasses import dataclass
 from difflib import SequenceMatcher
 
 
+# D: Extended with common Hinglish noise words so they don't pollute
+# relevance scoring. These are not translated — just filtered as stop words,
+# the same way English filler words like "the", "is", "are" are filtered.
 STOP_WORDS = {
+    # English stop words
     "a", "an", "and", "are", "as", "at", "be", "by", "for", "from",
     "in", "is", "it", "of", "on", "or", "the", "to", "was", "were", "with",
+    # Common Hinglish noise words (verb forms, postpositions, particles)
+    # These carry no entity/event meaning in a news relevance context.
+    "hua", "hui", "hue", "hai", "hain", "ho", "tha", "thi",
+    "ka", "ki", "ke", "ko", "se", "ne", "par", "kya", "jo", "bhi",
+    "aur", "ya", "nahi", "na", "gaya", "gayi", "gaye", "raha", "rahi",
+    "wala", "wali", "wale", "mein", "pe",
 }
 
 EVENT_GROUPS = {
@@ -17,6 +27,7 @@ EVENT_GROUPS = {
     "election": {"wins", "won", "elected", "election", "vote", "appointed"},
     "disaster": {"earthquake", "flood", "fire", "cyclone", "explosion", "crash", "accident"},
     "ban": {"banned", "ban", "prohibited"},
+    "launch": {"launched", "launch", "launched", "liftoff", "mission", "deployed"},
 }
 GENERIC_CAPITAL_WORDS = {"former", "indian", "prime", "president", "minister"}
 THRESHOLDS = {"entity_only": 0.40, "entity_event": 0.60, "general": 0.45}

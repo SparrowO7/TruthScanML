@@ -2,10 +2,23 @@
 
 This module deliberately keeps all network work separate from Offline
 Prediction. A search or extraction failure never changes the local pipeline.
+
+Improvements applied (A–F):
+  A  Article text extraction uses a fallback chain:
+       <article> → <main> → all <p> tags
+     so more sites yield readable text and fewer predictions are None.
+  B  Search queries are cleaned before being sent to the provider:
+       leading question words and trailing '?' are removed.
+  C  A None prediction is now skipped entirely in consensus scoring instead
+     of adding a neutral 0.5 + 0.5 that pollutes the weighted total.
+  D  Handled in relevance.py (Hinglish stopwords).
+  E  ML confidence is scaled by the article's relevance score before being
+     added to the consensus pool (conservative — no accuracy claim).
+  F  Debunk and confirm patterns are checked against the full scraped article
+     body when available, not just the title + snippet.
 """
 
-from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import re
 from typing import Any
 from urllib.parse import urlparse
@@ -36,21 +49,29 @@ TRUSTED_DOMAINS = {
     "pib.gov.in", "nasa.gov", "reuters.com", "apnews.com", "bbc.com", "bbc.co.uk",
     "thehindu.com", "ndtv.com", "indianexpress.com", "usatoday.com", "livescience.com",
     "britannica.com", "wikipedia.org", "nature.com", "yahoo.com", "msn.com",
-    "bloomberg.com", "nytimes.com", "washingtonpost.com", "aljazeera.com"
+    "bloomberg.com", "nytimes.com", "washingtonpost.com", "aljazeera.com",
+    "timesofindia.com", "hindustantimes.com", "scroll.in", "thewire.in",
 }
 
 DEBUNK_PATTERNS = [
     r"\bfact\s*check\s*:\s*false\b", r"\bfalse\s+claim\b", r"\bdebunked\b",
     r"\bhoax\b", r"\bmisleading\b", r"\bbaseless\b", r"\bfabricated\b",
     r"\bfake\s+news\b", r"\buntrue\b", r"\brefuted\b", r"\bnot\s+true\b",
-    r"\bno\s+evidence\b", r"\bdisproven\b"
+    r"\bno\s+evidence\b", r"\bdisproven\b", r"\bmisinformation\b", r"\bfalsely\s+claims\b",
 ]
 
 CONFIRM_PATTERNS = [
     r"\bfact\s*check\s*:\s*true\b", r"\bconfirmed\b", r"\bofficial\s+statement\b",
     r"\bverified\b", r"\bestablished\s+fact\b", r"\bis\s+round\b", r"\bnot\s+flat\b",
-    r"\bhow\s+we\s+know\b", r"\bscientific\s+fact\b"
+    r"\bhow\s+we\s+know\b", r"\bscientific\s+fact\b", r"\baccording\s+to\s+scientists\b",
+    r"\bofficially\s+confirmed\b",
 ]
+
+# B: Question-starter words to strip from the beginning of a search query.
+_QUESTION_STARTERS = re.compile(
+    r"^(is|are|can|does|do|was|were|has|have|did|will|would|should|could|kya)\s+",
+    flags=re.IGNORECASE,
+)
 
 
 class NewsSearchError(RuntimeError):
@@ -70,7 +91,12 @@ class SourceResult:
 
 @dataclass(frozen=True)
 class SourceAnalysis:
-    """A discovered source and its optional model prediction."""
+    """A discovered source and its optional model prediction.
+
+    article_has_debunk / article_has_confirm reflect pattern checks run
+    against the full scraped article body (F), not only the title + snippet.
+    They are False when article text was unavailable.
+    """
 
     title: str
     url: str
@@ -82,6 +108,9 @@ class SourceAnalysis:
     event_score: float
     acceptance_reason: str
     prediction: PredictionResult | None
+    # F: article-body-level stance signals
+    article_has_debunk: bool = False
+    article_has_confirm: bool = False
 
 
 @dataclass(frozen=True)
@@ -106,6 +135,32 @@ class OnlineVerificationResult:
     def has_sufficient_relevant_sources(self) -> bool:
         return self.sources_found >= MIN_RELEVANT_SOURCES
 
+
+# ---------------------------------------------------------------------------
+# B: Search query builder
+# ---------------------------------------------------------------------------
+
+def build_search_query(headline: str) -> str:
+    """Return a cleaner search query derived from the user headline.
+
+    Only surface-level cleanup is applied so the factual meaning is preserved:
+      - Strip leading question-starter words (Is/Are/Kya …)
+      - Strip trailing question marks
+      - Collapse extra whitespace
+
+    The original headline is still used for relevance matching and scoring;
+    this cleaned form is sent to the search provider only.
+    """
+    query = headline.strip()
+    query = re.sub(r"\?+$", "", query).strip()
+    query = _QUESTION_STARTERS.sub("", query).strip()
+    query = re.sub(r"\s+", " ", query).strip()
+    return query or headline.strip()
+
+
+# ---------------------------------------------------------------------------
+# Main pipeline entry point
+# ---------------------------------------------------------------------------
 
 def verify_headline(headline: str) -> OnlineVerificationResult:
     """Search public news results and classify successfully extracted articles."""
@@ -133,17 +188,25 @@ def verify_headline(headline: str) -> OnlineVerificationResult:
     )
 
 
+# ---------------------------------------------------------------------------
+# Search (B: cleaned query used here)
+# ---------------------------------------------------------------------------
+
 @st.cache_data(ttl=600, show_spinner=False)
 def search_news(headline: str) -> tuple[SourceResult, ...]:
-    """Find up to five public news results for a headline without an API key.
+    """Find up to twenty public news results for a headline without an API key.
 
     DuckDuckGo is preferred. DDGS's automatic backend is a no-key fallback for
     temporary provider blocks or rate limits; it does not affect Offline mode.
+    The query sent to providers is cleaned (B) while the original headline
+    is kept for all downstream relevance and scoring logic.
     """
+
+    query = build_search_query(headline)  # B
 
     try:
         raw_results = DDGS().news(
-            query=headline,
+            query=query,
             max_results=MAX_SEARCH_RESULTS,
             backend="duckduckgo",
         )
@@ -153,7 +216,7 @@ def search_news(headline: str) -> tuple[SourceResult, ...]:
     if not raw_results:
         try:
             raw_results = DDGS().news(
-                query=headline,
+                query=query,
                 max_results=MAX_SEARCH_RESULTS,
                 backend="auto",
             )
@@ -162,7 +225,7 @@ def search_news(headline: str) -> tuple[SourceResult, ...]:
 
     if not raw_results:
         try:
-            raw_results = search_google_news_rss(headline)
+            raw_results = search_google_news_rss(query)
         except Exception as error:
             raise NewsSearchError(
                 "Free news-search providers are temporarily unavailable or "
@@ -190,12 +253,12 @@ def search_news(headline: str) -> tuple[SourceResult, ...]:
     return tuple(sources)
 
 
-def search_google_news_rss(headline: str) -> list[dict[str, str]]:
+def search_google_news_rss(query: str) -> list[dict[str, str]]:
     """Use Google News RSS as a no-key fallback when DDGS is rate-limited."""
 
     response = requests.get(
         "https://news.google.com/rss/search",
-        params={"q": headline, "hl": "en-IN", "gl": "IN", "ceid": "IN:en"},
+        params={"q": query, "hl": "en-IN", "gl": "IN", "ceid": "IN:en"},
         headers=HTTP_HEADERS,
         timeout=10,
     )
@@ -246,15 +309,85 @@ def to_source_result(raw_result: dict[str, Any]) -> SourceResult | None:
     )
 
 
+# ---------------------------------------------------------------------------
+# Article extraction (A) and analysis (F)
+# ---------------------------------------------------------------------------
+
+def extract_article_text(url: str) -> str:
+    """Retrieve readable paragraph text with a fallback chain (A).
+
+    Extraction order:
+      1. <article> tag paragraphs  — most news sites use this semantic element
+      2. <main> tag paragraphs     — common fallback container
+      3. All <p> tags on the page  — original behaviour, broadest net
+
+    Each level is tried only if the previous one yields fewer than
+    MIN_ARTICLE_CHARACTERS of clean text.
+    """
+
+    response = requests.get(url, headers=HTTP_HEADERS, timeout=10)
+    response.raise_for_status()
+    if "html" not in response.headers.get("Content-Type", "").lower():
+        raise ValueError("The source did not return an HTML article.")
+
+    soup = BeautifulSoup(response.text, "html.parser")
+    for unwanted_tag in soup(["script", "style", "nav", "footer", "header", "aside", "form"]):
+        unwanted_tag.decompose()
+
+    def _paragraphs_from(tag) -> str:
+        if tag is None:
+            return ""
+        return " ".join(
+            p.get_text(" ", strip=True)
+            for p in tag.find_all("p")
+            if p.get_text(" ", strip=True)
+        )
+
+    # A: Fallback chain
+    article_text = _paragraphs_from(soup.find("article"))
+
+    if len(article_text) < MIN_ARTICLE_CHARACTERS:
+        article_text = _paragraphs_from(soup.find("main"))
+
+    if len(article_text) < MIN_ARTICLE_CHARACTERS:
+        # Broadest fallback: collect all <p> tags on the page
+        article_text = " ".join(
+            p.get_text(" ", strip=True)
+            for p in soup.find_all("p")
+            if p.get_text(" ", strip=True)
+        )
+
+    if len(article_text) < MIN_ARTICLE_CHARACTERS:
+        raise ValueError("The article did not provide enough readable text.")
+
+    return article_text
+
+
+def _check_patterns(text: str) -> tuple[bool, bool]:
+    """Return (has_debunk, has_confirm) for a given text block."""
+    lower = text.lower()
+    has_debunk = any(re.search(p, lower) for p in DEBUNK_PATTERNS)
+    has_confirm = any(re.search(p, lower) for p in CONFIRM_PATTERNS)
+    return has_debunk, has_confirm
+
+
 def analyze_source(source: SourceResult, match: ClaimMatch) -> SourceAnalysis:
-    """Extract one article and send its text through the existing ML model."""
+    """Extract one article, check body-level stance signals (F), and run ML."""
+
+    article_text: str | None = None
+    prediction: PredictionResult | None = None
+    article_has_debunk = False
+    article_has_confirm = False
 
     try:
         article_text = extract_article_text(source.url)
     except Exception:
-        prediction = None
-    else:
+        pass
+
+    if article_text:
         prediction = predict_news(article_text)
+        # F: check debunk/confirm patterns on the full article body
+        article_has_debunk, article_has_confirm = _check_patterns(article_text)
 
     return SourceAnalysis(
         title=source.title,
@@ -267,6 +400,8 @@ def analyze_source(source: SourceResult, match: ClaimMatch) -> SourceAnalysis:
         event_score=match.event_score,
         acceptance_reason=match.reason,
         prediction=prediction,
+        article_has_debunk=article_has_debunk,
+        article_has_confirm=article_has_confirm,
     )
 
 
@@ -284,40 +419,28 @@ def to_unanalyzed_source(source: SourceResult, match: ClaimMatch) -> SourceAnaly
         event_score=match.event_score,
         acceptance_reason=match.reason,
         prediction=None,
+        article_has_debunk=False,
+        article_has_confirm=False,
     )
 
 
-def extract_article_text(url: str) -> str:
-    """Retrieve readable paragraph text without native lxml dependencies."""
-
-    response = requests.get(url, headers=HTTP_HEADERS, timeout=10)
-    response.raise_for_status()
-    if "html" not in response.headers.get("Content-Type", "").lower():
-        raise ValueError("The source did not return an HTML article.")
-
-    soup = BeautifulSoup(response.text, "html.parser")
-    for unwanted_tag in soup(["script", "style", "nav", "footer", "header", "aside", "form"]):
-        unwanted_tag.decompose()
-
-    paragraphs = [
-        paragraph.get_text(" ", strip=True)
-        for paragraph in soup.find_all("p")
-        if paragraph.get_text(" ", strip=True)
-    ]
-    article_text = " ".join(paragraphs)
-
-    if len(article_text) < MIN_ARTICLE_CHARACTERS:
-        raise ValueError("The article did not provide enough readable text.")
-
-    return article_text
-
+# ---------------------------------------------------------------------------
+# Consensus scoring (C, E, F)
+# ---------------------------------------------------------------------------
 
 def calculate_consensus(
     headline: str,
     sources: tuple[SourceAnalysis, ...],
 ) -> tuple[str | None, float | None]:
-    """Return a multi-signal consensus label and confidence combining claim-stance,
-    domain authority, and extracted article ML predictions.
+    """Return a multi-signal consensus label and confidence.
+
+    Signal priority (highest → lowest):
+      1. Flat/round-earth hard rules (special-case scientific consensus)
+      2. Debunk / confirm patterns from title + snippet
+      3. Article-body debunk / confirm patterns (F)
+      4. Trusted domain with no debunk signal → mild real-news boost
+      5. ML prediction, scaled conservatively by relevance score (E)
+         — None predictions are skipped entirely (C)
     """
 
     if not sources:
@@ -336,42 +459,66 @@ def calculate_consensus(
             td in source.publisher.lower() for td in TRUSTED_DOMAINS
         )
 
-        text = f"{source.title} {source.snippet}".lower()
-        has_debunk = any(re.search(pattern, text) for pattern in DEBUNK_PATTERNS)
-        has_confirm = any(re.search(pattern, text) for pattern in CONFIRM_PATTERNS)
+        # Snippet + title level signals (existing)
+        snippet_text = f"{source.title} {source.snippet}".lower()
+        snippet_debunk = any(re.search(p, snippet_text) for p in DEBUNK_PATTERNS)
+        snippet_confirm = any(re.search(p, snippet_text) for p in CONFIRM_PATTERNS)
 
+        # F: Merge with article-body level signals
+        has_debunk = snippet_debunk or source.article_has_debunk
+        has_confirm = snippet_confirm or source.article_has_confirm
+
+        # --- Priority 1: Scientific hard-rules ---
         if is_flat_claim:
-            if "not flat" in text or "round" in text or "conspiracy" in text or "myth" in text or has_debunk:
+            body = snippet_text
+            if "not flat" in body or "round" in body or "conspiracy" in body or "myth" in body or has_debunk:
                 weight = 2.5 if is_trusted else 1.8
                 fake_score += weight * 0.95
             else:
                 fake_score += 1.5 * 0.80
+
         elif is_round_claim:
-            if "round" in text or "not flat" in text or "scientific fact" in text or has_confirm:
+            body = snippet_text
+            if "round" in body or "not flat" in body or "scientific fact" in body or has_confirm:
                 weight = 2.5 if is_trusted else 1.8
                 real_score += weight * 0.95
             elif has_debunk:
                 fake_score += 2.0 * 0.90
             else:
                 real_score += 1.5 * 0.80
+
+        # --- Priority 2 & 3: Debunk / confirm patterns (snippet + body) ---
         elif has_debunk:
             weight = 2.5 if is_trusted else 1.8
             fake_score += weight * 0.90
+
         elif has_confirm:
             weight = 2.0 if is_trusted else 1.2
             real_score += weight * 0.90
-        elif is_trusted and not has_debunk:
+
+        # --- Priority 4: Trusted domain with no debunk signal ---
+        elif is_trusted:
             real_score += 1.5 * 0.85
+
+        # --- Priority 5: ML prediction (C + E) ---
         else:
-            ml_label = source.prediction.label if source.prediction else None
-            ml_confidence = source.prediction.confidence if source.prediction else 0.5
+            if source.prediction is None:
+                # C: No evidence at all — skip rather than adding neutral noise
+                continue
+
+            ml_label = source.prediction.label
+            ml_confidence = source.prediction.confidence
+
+            # E: Scale ML contribution conservatively by article relevance.
+            # similarity_score is already 0–1. We cap the multiplier at 1.5
+            # so a perfectly relevant article gets at most 1.5× weight.
+            relevance_weight = min(0.5 + source.similarity_score, 1.5)
+
             if ml_label == "Fake News":
-                fake_score += 1.0 * ml_confidence
+                fake_score += relevance_weight * ml_confidence
             elif ml_label == "Real News":
-                real_score += 1.0 * ml_confidence
-            else:
-                real_score += 0.5
-                fake_score += 0.5
+                real_score += relevance_weight * ml_confidence
+            # If label is anything else, skip (C).
 
     total_score = real_score + fake_score
     if total_score == 0:
