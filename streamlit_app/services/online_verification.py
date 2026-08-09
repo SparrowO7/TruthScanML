@@ -44,28 +44,76 @@ HTTP_HEADERS = {
     )
 }
 
+# Trusted fact-check and authoritative news domains.
+# Indian sources prioritised for local news verification.
 TRUSTED_DOMAINS = {
-    "politifact.com", "snopes.com", "factcheck.org", "altnews.in", "boomlive.in",
-    "pib.gov.in", "nasa.gov", "reuters.com", "apnews.com", "bbc.com", "bbc.co.uk",
-    "thehindu.com", "ndtv.com", "indianexpress.com", "usatoday.com", "livescience.com",
-    "britannica.com", "wikipedia.org", "nature.com", "yahoo.com", "msn.com",
+    # International fact-checkers
+    "politifact.com", "snopes.com", "factcheck.org", "fullfact.org",
+    # Indian fact-checkers
+    "altnews.in", "boomlive.in", "pib.gov.in", "factcrescendo.com",
+    "vishvasnews.com", "newschecker.in", "indiatoday.in",
+    # International wire services / broadcasters
+    "nasa.gov", "reuters.com", "apnews.com", "bbc.com", "bbc.co.uk",
     "bloomberg.com", "nytimes.com", "washingtonpost.com", "aljazeera.com",
-    "timesofindia.com", "hindustantimes.com", "scroll.in", "thewire.in",
+    "usatoday.com", "livescience.com", "britannica.com", "wikipedia.org",
+    "nature.com", "who.int", "un.org",
+    # Indian mainstream news
+    "thehindu.com", "ndtv.com", "indianexpress.com",
+    "timesofindia.com", "hindustantimes.com", "scroll.in",
+    "thewire.in", "theprint.in", "moneycontrol.com", "zeenews.india.com",
+    "aajtak.in", "abplive.com",
 }
 
+# Domains known to publish satire, parody, or unreliable viral content.
+# Articles from these are excluded from scoring.
+SATIRE_DOMAINS = {
+    "fauxy.com", "theonion.com", "babylonbee.com", "newsthump.com",
+    "clickhole.com", "worldnewsdailyreport.com", "empirenews.net",
+}
+
+# --- Fake / debunking signal patterns ---
 DEBUNK_PATTERNS = [
-    r"\bfact\s*check\s*:\s*false\b", r"\bfalse\s+claim\b", r"\bdebunked\b",
-    r"\bhoax\b", r"\bmisleading\b", r"\bbaseless\b", r"\bfabricated\b",
+    # Explicit fact-check verdicts
+    r"\bfact\s*check\s*:\s*false\b", r"\bfact\s*check\b", r"\bfact\s*checked\b",
+    # Debunking language
+    r"\bdebunked\b", r"\bhoax\b", r"\bhoax\s+alert\b", r"\bfake\s+alert\b",
+    r"\bmisleading\b", r"\bbaseless\b", r"\bfabricated\b",
     r"\bfake\s+news\b", r"\buntrue\b", r"\brefuted\b", r"\bnot\s+true\b",
-    r"\bno\s+evidence\b", r"\bdisproven\b", r"\bmisinformation\b", r"\bfalsely\s+claims\b",
+    r"\bno\s+evidence\b", r"\bdisproven\b", r"\bmisinformation\b",
+    r"\bfalsely\s+claims\b", r"\bfalse\s+claim\b", r"\bviral\s+fake\b",
+    r"\brunfounded\b", r"\bunverified\s+claim\b", r"\bspread\s+misinformation\b",
+    # Death hoax specific
+    r"\bdeath\s+hoax\b", r"\bdeath\s+rumou?r\b", r"\bdeath\s+news\s+fake\b",
+    r"\bdied\s+hoax\b", r"\bnot\s+dead\b", r"\bstill\s+alive\b",
+    r"\bafwah\b", r"\brumour\b", r"\brumor\b",
 ]
 
+# --- Real / confirmation signal patterns ---
 CONFIRM_PATTERNS = [
     r"\bfact\s*check\s*:\s*true\b", r"\bconfirmed\b", r"\bofficial\s+statement\b",
-    r"\bverified\b", r"\bestablished\s+fact\b", r"\bis\s+round\b", r"\bnot\s+flat\b",
-    r"\bhow\s+we\s+know\b", r"\bscientific\s+fact\b", r"\baccording\s+to\s+scientists\b",
-    r"\bofficially\s+confirmed\b",
+    r"\bverified\b", r"\bestablished\s+fact\b", r"\bscientific\s+fact\b",
+    r"\baccording\s+to\s+scientists\b", r"\bofficially\s+confirmed\b",
+    r"\bgovernment\s+confirms\b", r"\bpress\s+conference\b",
+    r"\bofficial\s+source\b", r"\bisro\s+confirms\b", r"\bnasa\s+confirms\b",
+    r"\bis\s+round\b", r"\bnot\s+flat\b", r"\bhow\s+we\s+know\b",
 ]
+
+# --- Alive / person-is-fine signals (used in death-claim contradiction) ---
+ALIVE_SIGNALS = [
+    r"\balive\b", r"\bstill\s+alive\b", r"\bis\s+alive\b",
+    r"\bdenies\b", r"\bdenied\b", r"\brefutes\b",
+    r"\bis\s+fine\b", r"\bis\s+well\b", r"\bis\s+safe\b",
+    r"\bappears\s+in\b", r"\bseen\s+at\b", r"\bspotted\b",
+    r"\bposts\s+on\b", r"\bshares\s+on\b", r"\btweets\b",
+    r"\bnot\s+dead\b", r"\bdeath\s+hoax\b", r"\bdeath\s+rumou?r\b",
+    r"\bno\s+truth\b",
+]
+
+# Verb/adjective forms that signal a death claim in the headline.
+_DEATH_WORDS = re.compile(
+    r"\b(died|dead|death|passed\s+away|no\s+more|is\s+no\s+more|nahi\s+rahe|gujar\s+gaye|mar\s+gaye)\b",
+    flags=re.IGNORECASE,
+)
 
 # ---------------------------------------------------------------------------
 # Fix 1 — Location / destination contradiction constants
@@ -159,6 +207,75 @@ def _locations_contradict(claim_loc: str, article_loc: str) -> bool:
     if claim_group is None or article_group is None:
         return False
     return claim_group != article_group
+
+
+# ---------------------------------------------------------------------------
+# Death-claim contradiction engine
+# (catches "Amitabh Bachchan died" / "PM Modi dead" type hoaxes)
+# ---------------------------------------------------------------------------
+
+def extract_death_subject(headline: str) -> str | None:
+    """Return the subject name if the headline claims someone died.
+
+    Works by checking whether a death-word appears in the headline alongside
+    a plausible named entity (two or more capitalised words, or a known-role
+    title followed by a name).  Returns the lowercased name string, or None.
+
+    Examples:
+      "Amitabh Bachchan died"       → "amitabh bachchan"
+      "PM Modi is no more"          → "modi"
+      "Chandrayaan 3 landing"       → None  (no death word)
+    """
+    if not _DEATH_WORDS.search(headline):
+        return None
+
+    # Try to extract a two-word capitalised name (e.g. "Amitabh Bachchan").
+    name_match = re.search(r"\b([A-Z][a-z]+\s+[A-Z][a-z]+)\b", headline)
+    if name_match:
+        return name_match.group(1).lower()
+
+    # Fall back to a single capitalised name after a role title (e.g. "PM Modi").
+    # The role itself is matched case-insensitively; the name must be title-case.
+    role_match = re.search(
+        r"\b(?:pm|cm|president|minister|actor|cricketer|politician|singer|director)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)",
+        headline,
+    )
+    if role_match:
+        return role_match.group(1).lower()
+
+    # Last resort: first capitalised word that appears after the start of the sentence.
+    # Avoid picking up the very first word (which may be a sentence-starter).
+    any_name = re.findall(r"\b([A-Z][a-z]{2,})\b", headline)
+    # Skip the first capitalised word if it starts the sentence
+    candidates = any_name[1:] if any_name and headline.strip().startswith(any_name[0]) else any_name
+    if candidates:
+        return candidates[0].lower()
+
+    return None
+
+
+def article_confirms_person_alive(person_name: str, article_text: str) -> bool:
+    """Return True when an article says the named person is alive / active.
+
+    Strategy:
+      1. The article must actually mention the person's name (or a meaningful
+         part of it) so we don't trigger on unrelated articles.
+      2. At least one ALIVE_SIGNAL must appear anywhere in the article text.
+
+    This is intentionally conservative: both conditions must hold.
+    """
+    lower = article_text.lower()
+
+    # Check that at least one token of the person's name appears.
+    name_tokens = [t for t in person_name.split() if len(t) > 2]
+    if not name_tokens:
+        return False
+    name_present = any(token in lower for token in name_tokens)
+    if not name_present:
+        return False
+
+    # Check for at least one alive signal.
+    return any(re.search(pattern, lower) for pattern in ALIVE_SIGNALS)
 
 
 # B: Question-starter words to strip from the beginning of a search query.
@@ -535,15 +652,15 @@ def calculate_consensus(
     """Return a multi-signal consensus label and confidence.
 
     Signal priority (highest to lowest):
-      0. Location/destination contradiction (Fix 1) — checked FIRST for each source.
-         If the claim says 'sun' but the article is about 'moon', that source
-         actively contradicts the claim regardless of domain trust.
-      1. Flat/round-earth hard rules (special-case scientific consensus)
-      2. Debunk / confirm patterns from title + snippet
-      3. Article-body debunk / confirm patterns (F)
-      4. Trusted domain with no debunk/contradiction signal → mild real-news boost (Fix 3)
-      5. ML prediction, scaled conservatively by relevance score (E)
-         — None predictions are skipped entirely (C)
+      0a. Satire/parody domain → source excluded entirely.
+      0b. Death-claim contradiction — if headline says person died but
+          article says they are alive/active → strong fake signal.
+      0c. Location/destination contradiction (sun vs moon etc.) → fake signal.
+      1.  Flat/round-earth hard rules.
+      2.  Debunk / confirm patterns from title + snippet.
+      3.  Article-body debunk / confirm patterns (F).
+      4.  Trusted domain with no contradiction → mild real-news boost.
+      5.  ML prediction scaled by relevance score (E); None skipped (C).
     """
 
     if not sources:
@@ -559,8 +676,16 @@ def calculate_consensus(
     # Fix 1: Extract the spatial target of the claim once (e.g. 'sun', 'moon', 'mars').
     claim_location = extract_claim_location(headline)
 
+    # Death-claim: check if headline claims a named person has died.
+    death_subject = extract_death_subject(headline)
+
     for source in sources:
         domain = urlparse(source.url).netloc.lower()
+
+        # --- Priority 0a: Skip satire/parody domains entirely ---
+        if any(sd in domain for sd in SATIRE_DOMAINS):
+            continue
+
         is_trusted = any(td in domain for td in TRUSTED_DOMAINS) or any(
             td in source.publisher.lower() for td in TRUSTED_DOMAINS
         )
@@ -574,15 +699,18 @@ def calculate_consensus(
         has_debunk = snippet_debunk or source.article_has_debunk
         has_confirm = snippet_confirm or source.article_has_confirm
 
-        # --- Priority 0 (Fix 1): Location contradiction check ---
-        # Use title + snippet for location detection (always available).
-        # If article body was scraped, include it too for stronger signal.
-        location_text = snippet_text
-        if source.prediction is not None:
-            # article body text is not stored directly, but its stance flags
-            # are stored; for location we reuse snippet which covers the gist.
-            pass
+        # --- Priority 0b: Death-claim contradiction check ---
+        # If headline says "Amitabh Bachchan died" but article says he is alive,
+        # that article is strong evidence the death claim is false.
+        if death_subject is not None:
+            alive_text = snippet_text
+            if article_confirms_person_alive(death_subject, alive_text):
+                alive_weight = 3.5 if is_trusted else 2.0
+                fake_score += alive_weight
+                continue  # This source refutes the death claim — skip other signals.
 
+        # --- Priority 0c: Location contradiction check ---
+        location_text = snippet_text
         location_contradicted = False
         if claim_location is not None:
             article_location = _dominant_location(location_text)
@@ -590,12 +718,8 @@ def calculate_consensus(
                 location_contradicted = True
 
         if location_contradicted:
-            # The article is about a DIFFERENT location than the claim.
-            # A trusted source saying "Chandrayaan landed on Moon" is EVIDENCE
-            # AGAINST the claim "landed on Sun", not evidence for it.
             contradiction_weight = 3.0 if is_trusted else 2.0
             fake_score += contradiction_weight
-            # Skip all remaining signals for this source — contradiction is definitive.
             continue
 
         # --- Priority 1: Scientific hard-rules ---
