@@ -1,0 +1,26 @@
+# Python environments
+venv/
+.venv/
+env/
+ENV/
+
+# Python bytecode and test caches
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+
+# Local Streamlit state and secrets
+.streamlit/secrets.toml
+
+# Local prediction-history databases
+streamlit_app/data/*.db
+streamlit_app/data/*.sqlite
+streamlit_app/data/*.sqlite3
+
+# Local editor and operating-system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

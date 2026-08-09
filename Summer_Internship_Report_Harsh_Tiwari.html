@@ -1,0 +1,1755 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Summer Internship Report (61 Pages) - Harsh Tiwari (2303610130026)</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Merriweather:wght@400;700&family=Fira+Code:wght@400;500&display=swap');
+
+        @page {
+            size: A4;
+            margin: 10mm 12mm 10mm 12mm;
+        }
+
+        * {
+            box-sizing: border-box;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            color: #000000;
+            line-height: 1.5;
+            margin: 0;
+            padding: 0;
+            background-color: #f1f5f9;
+        }
+
+        .page {
+            width: 210mm;
+            height: 296.8mm;
+            padding: 14mm 18mm;
+            margin: 15px auto;
+            background: #ffffff;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            position: relative;
+            page-break-after: always;
+            page-break-inside: avoid;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            overflow: hidden;
+        }
+
+        @media print {
+            body {
+                background: none;
+            }
+            .page {
+                box-shadow: none;
+                margin: 0;
+                width: 100%;
+                height: 296.8mm;
+                padding: 14mm 18mm;
+            }
+        }
+
+        /* Cover Page Styling */
+        .cover-page {
+            text-align: center;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .cover-title-main {
+            font-family: 'Merriweather', serif;
+            font-size: 24pt;
+            font-weight: 700;
+            color: #1e3a8a;
+            letter-spacing: 1px;
+            margin-top: 10px;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+        }
+
+        .cover-subtitle {
+            font-size: 13pt;
+            font-weight: 600;
+            color: #475569;
+            margin-bottom: 15px;
+        }
+
+        .cover-project-title {
+            font-family: 'Merriweather', serif;
+            font-size: 20pt;
+            font-weight: 700;
+            color: #991b1b;
+            text-transform: uppercase;
+            margin: 15px 0;
+            line-height: 1.3;
+        }
+
+        .cover-fulfillment {
+            font-size: 10.5pt;
+            color: #475569;
+            margin: 10px 0 20px 0;
+            font-style: italic;
+        }
+
+        .degree-title {
+            font-size: 16pt;
+            font-weight: 700;
+            color: #0f172a;
+            margin-bottom: 5px;
+        }
+
+        .branch-title {
+            font-size: 14pt;
+            font-weight: 600;
+            color: #1e3a8a;
+            margin-bottom: 25px;
+        }
+
+        .rrgi-logo {
+            width: 160px;
+            height: 160px;
+            object-fit: contain;
+            margin: 15px 0;
+        }
+
+        .cover-footer-grid {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            text-align: left;
+            margin-top: 30px;
+            font-size: 11pt;
+            border-top: 2px solid #cbd5e1;
+            padding-top: 20px;
+        }
+
+        .submitted-by, .submitted-to {
+            width: 48%;
+        }
+
+        .submitted-by h4, .submitted-to h4 {
+            font-size: 12pt;
+            font-weight: 700;
+            color: #1e3a8a;
+            margin: 0 0 10px 0;
+            text-transform: uppercase;
+        }
+
+        .submitted-by p, .submitted-to p {
+            margin: 4px 0;
+            color: #1e293b;
+        }
+
+        .footer-header {
+            font-size: 8.5pt;
+            color: #64748b;
+            border-top: 1px solid #cbd5e1;
+            padding-top: 8px;
+            margin-top: auto;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        /* General Chapter Styling */
+        h1.chapter-num {
+            font-size: 13pt;
+            font-weight: 700;
+            color: #991b1b;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin: 0 0 4px 0;
+        }
+
+        h2.chapter-title {
+            font-family: 'Merriweather', serif;
+            font-size: 19pt;
+            font-weight: 700;
+            color: #1e3a8a;
+            margin: 0 0 12px 0;
+            border-bottom: 3px solid #1e3a8a;
+            padding-bottom: 6px;
+        }
+
+        h3.section-title {
+            font-size: 12.5pt;
+            font-weight: 700;
+            color: #991b1b;
+            margin: 12px 0 6px 0;
+        }
+
+        h4.subsection-title {
+            font-size: 10.5pt;
+            font-weight: 600;
+            color: #0f172a;
+            margin: 10px 0 4px 0;
+        }
+
+        p {
+            font-size: 10pt;
+            color: #1e293b;
+            text-align: justify;
+            margin-bottom: 10px;
+        }
+
+        ul, ol {
+            margin: 4px 0 10px 18px;
+            padding: 0;
+        }
+
+        li {
+            font-size: 10pt;
+            color: #1e293b;
+            margin-bottom: 4px;
+        }
+
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0;
+            font-size: 9pt;
+        }
+
+        table th {
+            background-color: #1e3a8a;
+            color: #ffffff;
+            font-weight: 600;
+            padding: 7px 9px;
+            text-align: left;
+            border: 1px solid #1e3a8a;
+        }
+
+        table td {
+            padding: 6px 9px;
+            border: 1px solid #cbd5e1;
+            color: #1e293b;
+        }
+
+        table tr:nth-child(even) {
+            background-color: #f8fafc;
+        }
+
+        /* Code Blocks - FIXED NO SCROLLBARS */
+        pre {
+            background-color: #0f172a;
+            color: #38bdf8;
+            font-family: 'Fira Code', monospace;
+            font-size: 8pt;
+            padding: 8px 10px;
+            border-radius: 6px;
+            overflow: hidden;
+            white-space: pre-wrap;
+            word-break: break-all;
+            margin: 8px 0;
+            line-height: 1.35;
+        }
+
+        /* Signatures block */
+        .sig-block {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 30px;
+            font-size: 10pt;
+        }
+
+        .sig-item {
+            width: 45%;
+        }
+
+        .sig-line {
+            border-bottom: 1px solid #475569;
+            margin-top: 40px;
+            margin-bottom: 5px;
+        }
+
+        /* Diagram Box - FIXED RESPONSIVE FIT NO SCROLLBARS */
+        .diagram-box {
+            background-color: #f8fafc;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-family: 'Fira Code', monospace;
+            font-size: 7.5pt;
+            line-height: 1.3;
+            color: #0f172a;
+            white-space: pre;
+            overflow: hidden;
+            max-width: 100%;
+            width: 100%;
+            margin: 8px 0;
+        }
+
+        /* Screenshots styling */
+        .app-img {
+            max-width: 100%;
+            max-height: 52mm;
+            object-fit: contain;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+        }
+
+        .print-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #1e3a8a;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 30px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            z-index: 9999;
+        }
+        @media print {
+            .print-btn { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <button class="print-btn" onclick="window.print()">🖨️ Print / Save 61-Page PDF</button>
+    
+<div class="page cover-page">
+    <div>
+        <div class="cover-title-main">SUMMER INTERNSHIP REPORT</div>
+        <div class="cover-subtitle">ON</div>
+        <div class="cover-project-title">AI-POWERED FAKE NEWS DETECTION SYSTEM<br><span style="font-size: 14pt; font-family: 'Inter'; color: #475569;">(TruthScanML)</span></div>
+        
+        <div class="cover-fulfillment">
+            Submitted in Partial Fulfillment of the Requirements for the Award of the Degree of
+        </div>
+        
+        <div class="degree-title">Bachelor of Technology</div>
+        <div class="branch-title">in<br>Information Technology</div>
+    </div>
+
+    <div>
+        <img class="rrgi-logo" src="rrgi_official_logo.png" alt="RRGI Logo">
+    </div>
+
+    <div style="width: 100%;">
+        <div class="cover-footer-grid">
+            <div class="submitted-by">
+                <h4>Submitted By</h4>
+                <p><strong>Harsh Tiwari</strong></p>
+                <p>Roll No.: <strong>2303610130026</strong></p>
+                <p>Branch: Information Technology</p>
+            </div>
+            <div class="submitted-to">
+                <h4>Submitted To</h4>
+                <p>Department of Information Technology</p>
+                <p>Lucknow, Uttar Pradesh</p>
+                <p>Affiliated to Dr. A.P.J. Abdul Kalam Technical University</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer-header">
+        <span>AI-Powered Fake News Detection System</span>
+        <span>Summer Internship Report Page 1</span>
+    </div>
+</div>
+
+    <div class="page">
+        
+    <h2 class="chapter-title" style="margin-top: 10px;">Certificate</h2>
+    
+    <p style="margin-top: 25px; line-height: 1.8;">
+        This is to certify that the Summer Internship Report entitled <strong>"AI-Powered Fake News Detection System Using Python"</strong> submitted by <strong>Harsh Tiwari</strong>, a student of <strong>Bachelor of Technology (B.Tech.) in Information Technology</strong> (Roll No.: <strong>2303610130026</strong>), is a bonafide record of the work carried out during the <strong>40-day Summer Internship</strong> under our guidance and supervision.
+    </p>
+
+    <p style="line-height: 1.8;">
+        The project has been completed in partial fulfillment of the requirements for the award of the Bachelor of Technology degree. During the internship, the student demonstrated sincerity, dedication, and technical competence while designing and developing the project using Machine Learning and Python programming concepts. The work presented in this report is original and has not been submitted, either wholly or partly, to any other university or institution for the award of any degree, diploma, or certificate.
+    </p>
+
+    <p style="margin-top: 20px;">
+        We wish the student every success in future academic pursuits and professional endeavors.
+    </p>
+
+    <div class="sig-block" style="margin-top: 70px;">
+        <div class="sig-item">
+            <div class="sig-line"></div>
+            <p><strong>Faculty Guide / Trainer</strong><br>Signature: ____________________<br>Name: Mr. Raju DevNath<br>Date: ____________________</p>
+        </div>
+        <div class="sig-item">
+            <div class="sig-line"></div>
+            <p><strong>Head of Department</strong><br>Signature: ____________________<br>Department of Information Technology</p>
+        </div>
+    </div>
+
+    <div class="sig-block" style="margin-top: 30px;">
+        <div class="sig-item">
+            <div class="sig-line"></div>
+            <p><strong>External Examiner</strong><br>Signature: ____________________</p>
+        </div>
+    </div>
+
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 2</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        
+    <h2 class="chapter-title" style="margin-top: 10px;">Declaration</h2>
+
+    <p style="margin-top: 30px; line-height: 1.8;">
+        I hereby declare that the Summer Internship Report entitled <strong>"AI-Powered Fake News Detection System Using Python"</strong> submitted by me is an original piece of work carried out during my 40-day industrial internship.
+    </p>
+
+    <p style="line-height: 1.8;">
+        The project has been completed under the guidance of my mentor <strong>Mr. Raju DevNath</strong> and faculty members of the Department of Information Technology.
+    </p>
+
+    <p style="line-height: 1.8;">
+        I further declare that this report has not been submitted previously to any university or institution for the award of any degree or diploma.
+    </p>
+
+    <div style="margin-top: 60px;">
+        <p><strong>Place:</strong> Lucknow</p>
+        <p><strong>Date:</strong> ____________________</p>
+    </div>
+
+    <div style="margin-top: 80px; width: 250px;">
+        <div class="sig-line"></div>
+        <p><strong>Signature of Student</strong><br>
+        <strong>Harsh Tiwari</strong><br>
+        Roll No.: 2303610130026</p>
+    </div>
+
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 3</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        
+    <h2 class="chapter-title" style="margin-top: 10px;">Acknowledgement</h2>
+
+    <p style="margin-top: 30px; line-height: 1.8;">
+        I express my sincere gratitude to my internship mentor, <strong>Mr. Raju DevNath</strong>, and the <strong>Department of Information Technology</strong>, R.R. Institute of Modern Technology (RRGI), Lucknow, for their valuable guidance and continuous encouragement throughout the internship period.
+    </p>
+
+    <p style="line-height: 1.8;">
+        I am thankful to our college management for providing the opportunity to work on a real-world Machine Learning project that significantly enhanced my technical, analytical, and software engineering skills.
+    </p>
+
+    <p style="line-height: 1.8;">
+        I would also like to thank my friends and family for their constant motivation and support during the successful completion of this internship.
+    </p>
+
+    <p style="line-height: 1.8;">
+        Finally, I express my gratitude to everyone who directly or indirectly contributed to the successful completion of this project.
+    </p>
+
+    <div style="margin-top: 80px; width: 250px;">
+        <div class="sig-line"></div>
+        <p><strong>Harsh Tiwari</strong><br>
+        Roll No.: 2303610130026</p>
+    </div>
+
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 4</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        
+    <h2 class="chapter-title" style="margin-top: 10px;">Abstract</h2>
+
+    <p style="margin-top: 25px; line-height: 1.8;">
+        The <strong>AI-Powered Fake News Detection System (TruthScanML)</strong> is a Python-based machine learning application developed to automate news credibility assessment and provide intelligent, multi-signal verification for digital news claims.
+    </p>
+
+    <p style="line-height: 1.8;">
+        The project enables a user to input a headline or article text, classify its authenticity using an offline Machine Learning pipeline (TF-IDF Vectorizer + Logistic Regression), fetch live web coverage via DuckDuckGo and Google News RSS APIs, and evaluate source-model consensus using a multi-signal stance engine.
+    </p>
+
+    <p style="line-height: 1.8;">
+        The system enforces input text validation, parses unstructured web content cleanly, manages persistent local SQLite prediction history records, and displays transparent relevance metrics.
+    </p>
+
+    <p style="line-height: 1.8;">
+        The project has been developed using the <strong>Python</strong> programming language and demonstrates the practical implementation of Object-Oriented Programming concepts, text cleaning pipelines, Machine Learning algorithms, web scraping, and Streamlit user interaction.
+    </p>
+
+    <p style="line-height: 1.8;">
+        This internship project helped in understanding the software development life cycle, problem-solving techniques, coding standards, debugging, testing, and documentation.
+    </p>
+
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 5</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        
+    <h2 class="chapter-title" style="margin-top: 10px;">Table of Contents</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 15%;">Chapter</th>
+                <th style="width: 70%;">Title</th>
+                <th style="width: 15%;">Page</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td>1</td><td>Introduction & Need of the Project</td><td>7</td></tr>
+            <tr><td>2</td><td>Institute / Training Profile (RRGI Lucknow)</td><td>10</td></tr>
+            <tr><td>3</td><td>Internship Objectives & About Project</td><td>13</td></tr>
+            <tr><td>4</td><td>Technologies Used & SDLC Model</td><td>16</td></tr>
+            <tr><td>5</td><td>Project Description & System Design</td><td>20</td></tr>
+            <tr><td>6</td><td>Existing System & Limitations</td><td>23</td></tr>
+            <tr><td>7</td><td>Proposed System & Major Features</td><td>25</td></tr>
+            <tr><td>8</td><td>Requirement Analysis (Hardware & Software)</td><td>27</td></tr>
+            <tr><td>9</td><td>Project Architecture & System Diagrams</td><td>30</td></tr>
+            <tr><td>10</td><td>Program Structure & Code Explanations</td><td>38</td></tr>
+            <tr><td>11</td><td>System Testing & Verification Results</td><td>46</td></tr>
+            <tr><td>12</td><td>Detailed 40-Day Internship Work Summary</td><td>52</td></tr>
+            <tr><td>13</td><td>Conclusion</td><td>58</td></tr>
+            <tr><td>14</td><td>References</td><td>59</td></tr>
+            <tr><td>15</td><td>Appendix & Deployed UI Screenshots</td><td>60</td></tr>
+            <tr><td>16</td><td>Final Project Summary & Achievements</td><td>61</td></tr>
+        </tbody>
+    </table>
+
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 6</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 1</h1>
+<h2 class="chapter-title">Introduction</h2>
+
+        <p>In the modern digital era, the rapid proliferation of social media platforms, blogs, and online news portals has revolutionized content publishing. However, it has also led to an alarming increase in fake news, misinformation, clickbait headlines, and digital hoaxes. Misinformation distorts public perception, impacts financial markets, and poses significant societal challenges.</p>
+        <p>The AI-Powered Fake News Detection System (TruthScanML) developed during this internship is a software application designed to classify news articles as <strong>Real News</strong> or <strong>Fake News</strong> using Machine Learning algorithms and live web verification.</p>
+        <p>Technology has transformed news verification by replacing manual, paper-based investigation with computerized systems. Modern software allows institutions to evaluate news articles, calculate machine learning authenticity scores, and cross-verify claims against live web coverage securely while minimizing human error.</p>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 7</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 1</h1>
+<h2 class="chapter-title">Need of the Project</h2>
+
+        <h3 class="section-title">Need of the Project</h3>
+        <p>The media monitoring sector requires software applications that simplify news, article, and rumor management while ensuring accuracy, security, and reliability. The major needs of the project are:</p>
+        <ul>
+            <li>Automated, unbiased evaluation of digital news text and stance</li>
+            <li>Instant detection of clickbait and fabricated news writing styles</li>
+            <li>Live cross-verification of news claims against authoritative global news outlets</li>
+            <li>Offline availability for local classification without reliance on paid cloud APIs</li>
+            <li>Persistent local prediction history storage for audit trails</li>
+            <li>Reduced manual fact-checking delays and counseling errors</li>
+            <li>Improved verification efficiency at the platform level</li>
+        </ul>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 8</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 1</h1>
+<h2 class="chapter-title">Objectives & Scope of the Project</h2>
+
+        <h3 class="section-title">Objectives of the Project</h3>
+        <ul>
+            <li>To design a Machine Learning pipeline using TF-IDF and Logistic Regression.</li>
+            <li>To build a multi-page interactive Streamlit web dashboard.</li>
+            <li>To implement a live web search & stance-matching engine using DDGS and Google News RSS.</li>
+            <li>To integrate SQLite for persistent history logging.</li>
+            <li>To retain a RESTful FastAPI endpoint for microservice interoperability.</li>
+        </ul>
+        <h3 class="section-title">Scope of the Project</h3>
+        <p>The system provides facilities such as News Text Parsing, Local Offline Prediction, Machine Learning Confidence Score Calculation, Live Web Search, Multi-Signal Stance Consensus Analysis, Publisher Domain Authority Recognition, SQLite Prediction History Logging, and Report Exporting.</p>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 9</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 2</h1>
+<h2 class="chapter-title">Institute / Training Profile</h2>
+
+        <p>The Summer Internship was conducted under the academic guidance of the <strong>Department of Information Technology</strong> at <strong>R.R. Institute of Modern Technology, Lucknow (R.R. Group of Institutions - RRGI)</strong>, affiliated to <strong>Dr. A.P.J. Abdul Kalam Technical University (AKTU), Lucknow</strong>.</p>
+        <table>
+            <tbody>
+                <tr><th style="width: 30%;">Institution</th><td>R.R. Institute of Modern Technology (RRGI), Lucknow</td></tr>
+                <tr><th>Affiliation</th><td>Dr. A.P.J. Abdul Kalam Technical University (AKTU), Lucknow</td></tr>
+                <tr><th>Department</th><td>Department of Information Technology</td></tr>
+                <tr><th>Student Name</th><td>Harsh Tiwari (Roll No.: 2303610130026)</td></tr>
+                <tr><th>Degree & Branch</th><td>B.Tech. in Information Technology</td></tr>
+                <tr><th>Trainer / Mentor</th><td>Mr. Raju DevNath</td></tr>
+                <tr><th>Training Program</th><td>Summer Industrial Training on AI & Machine Learning</td></tr>
+                <tr><th>Duration</th><td>40 Days</td></tr>
+            </tbody>
+        </table>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 10</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 2</h1>
+<h2 class="chapter-title">Training Vision & Facilities</h2>
+
+        <h3 class="section-title">Training Vision & Objectives</h3>
+        <ul>
+            <li>Strengthen Python programming and data structure fundamentals.</li>
+            <li>Bridge theoretical machine learning concepts with real-world application building.</li>
+            <li>Master Natural Language Processing (NLP) techniques, text cleaning, and vectorization.</li>
+            <li>Learn web scraping, API integration, and web app development using Streamlit.</li>
+            <li>Instill industry-relevant coding and documentation practices.</li>
+        </ul>
+        <h3 class="section-title">Training Facilities</h3>
+        <ul>
+            <li>Computer laboratory with Python 3.10, VS Code, and PyCharm installed on every system.</li>
+            <li>Dedicated trainer-led sessions on Core Python, OOP, and Machine Learning Integration.</li>
+            <li>Regular doubt-clearing and code-review sessions.</li>
+        </ul>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 11</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 2</h1>
+<h2 class="chapter-title">Training Methodology</h2>
+
+        <h3 class="section-title">Training Methodology</h3>
+        <p>The training combined conceptual sessions with a continuous hands-on project component, ensuring that every Python concept covered in class was immediately applied inside the AI Fake News Detection project.</p>
+        <ul>
+            <li>Concept sessions followed by guided practice exercises in Python.</li>
+            <li>Weekly milestones tied directly to project modules.</li>
+            <li>Peer code review and trainer feedback cycles led by Mr. Raju DevNath.</li>
+            <li>Incremental testing after every new module was added.</li>
+        </ul>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 12</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 3</h1>
+<h2 class="chapter-title">Internship Details & About Project</h2>
+
+        <h3 class="section-title">Internship Details</h3>
+        <table>
+            <thead><tr><th style="width: 30%;">Field</th><th style="width: 70%;">Details</th></tr></thead>
+            <tbody>
+                <tr><td>Internship Title</td><td>Summer Internship on AI Application Development</td></tr>
+                <tr><td>Project Title</td><td>AI-Powered Fake News Detection System Using Python</td></tr>
+                <tr><td>Internship Duration</td><td>40 Days</td></tr>
+                <tr><td>Programming Language</td><td>Python</td></tr>
+                <tr><td>Development Environment</td><td>VS Code, PyCharm, Windows Operating System</td></tr>
+                <tr><td>Technologies Used</td><td>Python, OOP Concepts, Scikit-Learn, TF-IDF, SQLite, Streamlit</td></tr>
+            </tbody>
+        </table>
+        <h3 class="section-title">About the Project</h3>
+        <p>The AI-Powered Fake News Detection System is an intelligent Python application developed to automate news credibility assessment and live online verification.</p>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 13</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 3</h1>
+<h2 class="chapter-title">Objectives of the Internship</h2>
+
+        <h3 class="section-title">Objectives of the Internship</h3>
+        <p>The primary objectives of the internship were:</p>
+        <ul>
+            <li>To understand software development using Python.</li>
+            <li>To improve Python programming and Machine Learning skills.</li>
+            <li>To implement Object-Oriented Programming concepts in NLP text classification.</li>
+            <li>To master Machine Learning text classification (TF-IDF + Logistic Regression), live web scraping, stance matching, and Streamlit web dashboard deployment.</li>
+            <li>To design an interactive Streamlit web-based decision support tool.</li>
+            <li>To develop secure, validated text parsing mechanisms.</li>
+            <li>To perform software testing and debugging.</li>
+            <li>To prepare professional technical documentation.</li>
+        </ul>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 14</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 3</h1>
+<h2 class="chapter-title">Learning Outcomes</h2>
+
+        <h3 class="section-title">Learning Outcomes</h3>
+        <h4 class="subsection-title">Technical Skills Gained</h4>
+        <ul>
+            <li>Python Programming & OOP Concepts</li>
+            <li>Machine Learning & Scikit-Learn (TF-IDF + Logistic Regression)</li>
+            <li>Text Parsing & Regex Validation</li>
+            <li>Streamlit UI Development & Layout Design</li>
+            <li>SQLite Database Logging & Persistence</li>
+            <li>Software Testing & Debugging</li>
+        </ul>
+        <h4 class="subsection-title">Professional Skills Gained</h4>
+        <ul>
+            <li>Documentation & Report Preparation</li>
+            <li>Time Management & Team Coordination</li>
+            <li>Problem Solving & Analytical Thinking</li>
+        </ul>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 15</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 4</h1>
+<h2 class="chapter-title">Technologies Used</h2>
+
+        <h3 class="section-title">Tools and Technologies Used</h3>
+        <table>
+            <thead><tr><th style="width: 30%;">Tool</th><th style="width: 70%;">Purpose</th></tr></thead>
+            <tbody>
+                <tr><td>Python 3.10+</td><td>Core Programming Language</td></tr>
+                <tr><td>VS Code / PyCharm</td><td>Development Environment & IDE</td></tr>
+                <tr><td>Scikit-Learn / Joblib</td><td>TF-IDF Vectorizer & Logistic Regression Classifier</td></tr>
+                <tr><td>DDGS / BeautifulSoup</td><td>Live Web News Search & Article Body Scraper</td></tr>
+                <tr><td>SQLite3</td><td>Persistent Prediction History Storage</td></tr>
+                <tr><td>Regex Validation Logic</td><td>Text Sanitization & Stance Pattern Checks</td></tr>
+                <tr><td>Streamlit</td><td>Web Dashboard Layout & UI Framework</td></tr>
+            </tbody>
+        </table>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 16</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 4</h1>
+<h2 class="chapter-title">Software Development Life Cycle (SDLC)</h2>
+
+        <h3 class="section-title">Software Development Life Cycle (SDLC)</h3>
+        <p>The project followed the Software Development Life Cycle across 6 distinct phases:</p>
+        <p><strong>Phase 1 – Requirement Analysis:</strong> Media monitoring requirements were identified, including text parsing, TF-IDF scoring, stance matching, and web verification.</p>
+        <p><strong>Phase 2 – Planning:</strong> The project structure, modules and workflow were planned.</p>
+        <p><strong>Phase 3 – Design:</strong> The menu structure and evaluation workflows were designed.</p>
+        <p><strong>Phase 4 – Development:</strong> All modules were coded in Python.</p>
+        <p><strong>Phase 5 – Testing:</strong> Each module was tested individually and integrated into the final application.</p>
+        <p><strong>Phase 6 – Maintenance:</strong> Future improvements such as deep learning transformers can be added.</p>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 17</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 4</h1>
+<h2 class="chapter-title">Features of the AI Fake News Detector</h2>
+
+        <h3 class="section-title">Features of the System</h3>
+        <ul>
+            <li>Offline Prediction with Regex Text Validation</li>
+            <li>Clean Text Parsing from User Input</li>
+            <li>Automated Machine Learning Confidence Score Calculation</li>
+            <li>Multi-Signal Stance Contradiction Detection</li>
+            <li>Live Web Coverage Search via DDGS API</li>
+            <li>Trusted Publisher Domain Authority Recognition</li>
+            <li>Real-time Source Consensus Verdict</li>
+            <li>SQLite Prediction Record History Database</li>
+        </ul>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 18</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 4</h1>
+<h2 class="chapter-title">Advantages & Limitations</h2>
+
+        <h3 class="section-title">Advantages of the System</h3>
+        <ul>
+            <li>Fast, 24/7 automated news credibility guidance</li>
+            <li>Objective machine learning scoring without subjective human bias</li>
+            <li>Instant claim stance analysis and web cross-verification</li>
+            <li>Modular programming structure with easy maintenance</li>
+        </ul>
+        <h3 class="section-title">Limitations</h3>
+        <ul>
+            <li>Requires internet connection for live online web queries</li>
+            <li>Dependent on search provider rate limits</li>
+            <li>Text-based news evaluation in version 1.0</li>
+        </ul>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 19</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 5</h1>
+<h2 class="chapter-title">Project Description and System Design</h2>
+
+        <p>The following pages document the functionality implemented in the AI-Powered Fake News Detection System Python source code, including text cleaning, TF-IDF scoring, stance matching matrix, web search extraction, SQLite persistence, and report exporting.</p>
+        <h3 class="section-title">Project Introduction</h3>
+        <p>The AI-Powered Fake News Detection System is a Python application developed to automate day-to-day media verification activities. The project was created during the 40-day internship to apply theoretical programming and AI concepts to a practical software solution.</p>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 20</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 5</h1>
+<h2 class="chapter-title">Problem Formulation</h2>
+
+        <h3 class="section-title">Problem Statement</h3>
+        <p>Traditional news verification systems often rely on manual processes that consume time and increase human bias. Users experience delays in news checking and lack clear insights into why articles are flagged as fabricated.</p>
+        <h4 class="subsection-title">Problems Identified</h4>
+        <ul>
+            <li>Manual news review management</li>
+            <li>Slow feedback retrieval</li>
+            <li>Risk of subjective evaluation errors</li>
+            <li>Lack of real-time web stance matching engines</li>
+        </ul>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 21</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 5</h1>
+<h2 class="chapter-title">Proposed Dual-Verification Solution</h2>
+
+        <h3 class="section-title">Proposed Solution Approach</h3>
+        <p>The proposed AI Fake News Detector automates verification by providing an instant offline prediction score, multi-signal stance consensus, and persistent local history records.</p>
+        <ul>
+            <li><strong>Offline Prediction:</strong> Instant classification using saved TF-IDF vectorizer and Logistic Regression model.</li>
+            <li><strong>Online Verification:</strong> Live web search cross-referencing claim stance against trusted publishers (NASA, Reuters, BBC, PolitiFact, Snopes, USA Today, etc.).</li>
+            <li><strong>SQLite History DB:</strong> Local logging of past predictions with confidence metrics.</li>
+        </ul>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 22</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 6</h1>
+<h2 class="chapter-title">Existing System Analysis</h2>
+
+        <p>The existing manual news guidance system has several limitations.</p>
+        <h3 class="section-title">Limitations of Existing Manual System</h3>
+        <ul>
+            <li>Paper/manual based news records</li>
+            <li>Time-consuming evaluation processing</li>
+            <li>Higher chances of subjective errors</li>
+            <li>Difficulty maintaining historical assessment records</li>
+            <li>Slow news verification response</li>
+            <li>Limited keyword validation and inefficient stance detection</li>
+        </ul>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 23</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 6</h1>
+<h2 class="chapter-title">Drawbacks of Unweighted Models</h2>
+
+        <h3 class="section-title">Drawbacks</h3>
+        <ul>
+            <li>Increased operational effort</li>
+            <li>Low efficiency and data redundancy</li>
+            <li>High financial cost for manual fact-checkers</li>
+            <li>False positives when running TF-IDF models on scientific articles discussing debunked claims (e.g. flat earth debate)</li>
+        </ul>
+        <p>These challenges motivated the need for our multi-signal stance-aware AI Fake News Detection solution.</p>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 24</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 7</h1>
+<h2 class="chapter-title">Proposed System & Features</h2>
+
+        <p>The proposed AI Fake News Detector replaces manual account and news handling with an automated software solution.</p>
+        <h3 class="section-title">Major Features</h3>
+        <ul>
+            <li>Candidate News Query Management</li>
+            <li>Automated Offline Prediction (TF-IDF + Logistic Regression)</li>
+            <li>Machine Learning Confidence Calculation</li>
+            <li>Multi-Signal Stance Consensus Engine</li>
+            <li>Publisher Domain Authority Recognition</li>
+            <li>Live Web Search & Article Extraction</li>
+            <li>SQLite Prediction History Logging</li>
+        </ul>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 25</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 7</h1>
+<h2 class="chapter-title">Benefits of Proposed System</h2>
+
+        <h3 class="section-title">Benefits of Proposed System</h3>
+        <ul>
+            <li>Improved efficiency</li>
+            <li>Reduced paperwork and manual delay</li>
+            <li>Faster assessment results</li>
+            <li>Objective scoring accuracy</li>
+            <li>Instant progress tracking and audit logging</li>
+            <li>Easy system maintenance</li>
+        </ul>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 26</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 8</h1>
+<h2 class="chapter-title">Hardware & Software Requirements</h2>
+
+        <h3 class="section-title">Hardware Requirements</h3>
+        <ul>
+            <li>Processor: Intel Core i3 or above</li>
+            <li>RAM: 4 GB minimum</li>
+            <li>Hard Disk: 500 GB</li>
+            <li>Keyboard, Mouse, Monitor</li>
+        </ul>
+        <h3 class="section-title">Software Requirements</h3>
+        <ul>
+            <li>Windows 10/11 Operating System</li>
+            <li>Python 3.10+ Environment</li>
+            <li>VS Code / PyCharm IDE</li>
+        </ul>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 27</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 8</h1>
+<h2 class="chapter-title">Execution Environment & Session Data</h2>
+
+        <h3 class="section-title">Execution Environment & Session Data</h3>
+        <ul>
+            <li>Command Prompt / Web Terminal execution</li>
+            <li>In-memory data structures (Lists, Dicts, DataFrames) for the current session</li>
+            <li>Streamlit session state management for multi-page interactive workflows</li>
+        </ul>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 28</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 8</h1>
+<h2 class="chapter-title">Non-Functional Specifications</h2>
+
+        <h3 class="section-title">Non-Functional Specifications</h3>
+        <p><strong>Performance:</strong> Fast text parsing and ML inference using optimized Scikit-Learn methods.</p>
+        <p><strong>Security:</strong> Local SQLite history processing without unauthenticated cloud data exposure.</p>
+        <p><strong>Reliability:</strong> Fault-tolerant network exception handling for DDGS & Google RSS APIs.</p>
+        <p><strong>Maintainability:</strong> Modular architecture organized into decoupled services.</p>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 29</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 9</h1>
+<h2 class="chapter-title">Layered System Architecture</h2>
+
+        <h3 class="section-title">System Architecture</h3>
+        <p>The project follows a simple layered architecture consisting of three major components:</p>
+        <p><strong>User Layer:</strong> Candidate / Student Interface (Streamlit Dashboard)</p>
+        <p><strong>Application Layer:</strong> Offline Prediction Module, Online Verification Engine, Stance Matcher Module, SQLite History Logger</p>
+        <p><strong>Storage & AI Layer:</strong> Saved Model Artifacts (.pkl), Local SQLite Database, DuckDuckGo & Google RSS APIs</p>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 30</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 9</h1>
+<h2 class="chapter-title">Data Flow Diagram (DFD Level-0)</h2>
+
+        <h3 class="section-title">Data Flow Diagram - Level 0</h3>
+        <div class="diagram-box">
++------------------+     Headline Text     +-------------------------+
+|  USER / CLIENT   | --------------------> |   STREAMLIT DASHBOARD   |
+|                  | <-------------------- |                         |
++------------------+   Prediction Output   +-------------------------+
+        </div>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 31</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 9</h1>
+<h2 class="chapter-title">Data Flow Diagram (DFD Level-1)</h2>
+
+        <h3 class="section-title">Data Flow Diagram - Level 1</h3>
+        <div class="diagram-box">
+                      Offline Text Input
+                              |
+                              v
+                   +---------------------+    +----------------------+
+                   | TF-IDF ML MODEL     |    | DDGS / GOOGLE RSS    |
+                   | (fake_news_model)   |    +----------------------+
+                   +---------------------+               |
+                              | Extracted                v Scraped Text
+                              v Prediction     +---------------------+
+                   +---------------------+     | STANCE CONSENSUS    |
+                   | SQLITE HISTORY DB   | <-- | (Multi-Signal Engine|
+                   +---------------------+     +---------------------+
+        </div>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 32</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 9</h1>
+<h2 class="chapter-title">System Flowchart</h2>
+
+        <h3 class="section-title">Flowchart of the System</h3>
+        <p>START -> Input Headline -> Valid Text? -> (No: Error Alert) -> (Yes: Preprocess Text) -> Run Offline ML -> Search Live Web -> Evaluate Stance Consensus -> Save SQLite Record -> END</p>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 33</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 9</h1>
+<h2 class="chapter-title">Use Case Diagram</h2>
+
+        <h3 class="section-title">Use Case Diagram</h3>
+        <p><strong>Actor:</strong> Candidate / Media Analyst</p>
+        <h4 class="subsection-title">Use Cases</h4>
+        <ul>
+            <li>Input News Headline</li>
+            <li>View Offline Model Score</li>
+            <li>Search Online Web Evidence</li>
+            <li>Inspect Stance Contradiction Signals</li>
+            <li>View Saved History Log</li>
+        </ul>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 34</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 9</h1>
+<h2 class="chapter-title">Class Diagram</h2>
+
+        <h3 class="section-title">Class Diagram</h3>
+        <div class="diagram-box">
++-------------------------------------------------------------+
+|                      PredictionResult                       |
++-------------------------------------------------------------+
+| + label: str                                                |
+| + confidence: float                                         |
++-------------------------------------------------------------+
+
++-------------------------------------------------------------+
+|                  OnlineVerificationResult                   |
++-------------------------------------------------------------+
+| + headline: str                                             |
+| + search_results_found: int                                 |
+| + sources: tuple[SourceAnalysis]                            |
+| + consensus_label: str                                      |
+| + consensus_confidence: float                               |
+| + verify_headline(headline): OnlineVerification             |
+| + calculate_consensus(headline, sources): tuple            |
++-------------------------------------------------------------+
+        </div>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 35</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 9</h1>
+<h2 class="chapter-title">Sequence Diagram Flow</h2>
+
+        <h3 class="section-title">Sequence Diagram Flow</h3>
+        <p>Candidate -> Input News Text -> System Preprocesses -> TF-IDF Model Evaluates -> Returns Confidence -> Online Verification Searches Web -> Stance Engine Calculates Consensus -> SQLite Logs Record.</p>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 36</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 9</h1>
+<h2 class="chapter-title">Module Division Breakdown</h2>
+
+        <h3 class="section-title">Project Modules Breakdown</h3>
+        <p><strong>1. Text Preprocessing Module:</strong> Extract and clean text using Regex and Stopwords removal.</p>
+        <p><strong>2. Offline ML Inference Module:</strong> Compute TF-IDF features and predict via Logistic Regression.</p>
+        <p><strong>3. Multi-Signal Stance Engine:</strong> Evaluate claim vs evidence stance matching and domain trust.</p>
+        <p><strong>4. Live Web Verification Module:</strong> Search DuckDuckGo/Google RSS APIs and scrape web article text.</p>
+        <p><strong>5. SQLite History Module:</strong> Store local prediction records with timestamps.</p>
+        <p><strong>6. Streamlit UI Module:</strong> Multi-page interactive layout.</p>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 37</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 10</h1>
+<h2 class="chapter-title">Program Structure & Imported Packages</h2>
+
+        <h3 class="section-title">Purpose of Imported Packages</h3>
+        <table>
+            <thead><tr><th style="width: 30%;">Package</th><th style="width: 70%;">Purpose</th></tr></thead>
+            <tbody>
+                <tr><td>joblib</td><td>Model artifact loading (.pkl)</td></tr>
+                <tr><td>ddgs</td><td>DuckDuckGo public search API</td></tr>
+                <tr><td>bs4 (BeautifulSoup)</td><td>HTML text extraction</td></tr>
+                <tr><td>requests</td><td>Google RSS HTTP requests</td></tr>
+                <tr><td>re</td><td>Regex text sanitization</td></tr>
+                <tr><td>sqlite3</td><td>Local database persistence</td></tr>
+                <tr><td>streamlit</td><td>Web UI dashboard layout</td></tr>
+            </tbody>
+        </table>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 38</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 10</h1>
+<h2 class="chapter-title">Key Fields & Data Schema</h2>
+
+        <h3 class="section-title">Key Fields</h3>
+        <table>
+            <thead><tr><th style="width: 30%;">Field</th><th style="width: 70%;">Description</th></tr></thead>
+            <tbody>
+                <tr><td>headline</td><td>Input news text or claim</td></tr>
+                <tr><td>cleaned_text</td><td>Preprocessed tokenized text</td></tr>
+                <tr><td>consensus_label</td><td>Final aggregated verdict label</td></tr>
+                <tr><td>consensus_confidence</td><td>Weighted probability ratio</td></tr>
+            </tbody>
+        </table>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 39</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 10</h1>
+<h2 class="chapter-title">Code Explanation — Preprocessing Module</h2>
+
+        <h3 class="section-title">Preprocessing Module — Code Explanation</h3>
+        <pre><code>def clean_text(text: str) -> str:
+    text = text.lower()
+    text = re.sub(r'https?://\S+|www\.\S+', '', text)
+    text = re.sub(r'[^a-zA-Z\s]', '', text)
+    tokens = [t for t in text.split() if t not in STOP_WORDS]
+    return ' '.join(tokens)</code></pre>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 40</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 10</h1>
+<h2 class="chapter-title">Code Explanation — ML Inference Pipeline</h2>
+
+        <h3 class="section-title">ML Inference Pipeline — Code Explanation</h3>
+        <pre><code>def predict_news(text: str) -> PredictionResult:
+    model, vectorizer = load_artifacts()
+    cleaned = clean_text(text)
+    features = vectorizer.transform([cleaned])
+    pred = int(model.predict(features)[0])
+    label = "Fake News" if pred == 1 else "Real News"
+    conf = float(max(model.predict_proba(features)[0]))
+    return PredictionResult(label=label, confidence=conf)</code></pre>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 41</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 10</h1>
+<h2 class="chapter-title">Code Explanation — Stance Engine</h2>
+
+        <h3 class="section-title">Stance Engine — Code Explanation</h3>
+        <pre><code>def calculate_consensus(headline: str, sources: tuple):
+    real_score, fake_score = 0.0, 0.0
+    h_lower = headline.lower().strip()
+    is_flat = bool(re.search(r"\b(flat\s+earth)\b", h_lower))
+    for s in sources:
+        text = f"{s.title} {s.snippet}".lower()
+        if is_flat and ("not flat" in text or "round" in text):
+            fake_score += 2.5
+        elif not is_flat and "round" in text:
+            real_score += 2.5
+    total = real_score + fake_score
+    return ("Real News", real_score/total) if real_score > fake_score else ("Fake News", fake_score/total)</code></pre>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 42</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 10</h1>
+<h2 class="chapter-title">Code Explanation — Domain Authority Registry</h2>
+
+        <h3 class="section-title">Domain Authority — Code Explanation</h3>
+        <pre><code>TRUSTED_DOMAINS = {
+    "politifact.com", "snopes.com", "factcheck.org", "altnews.in",
+    "pib.gov.in", "nasa.gov", "reuters.com", "apnews.com", "bbc.com",
+    "thehindu.com", "ndtv.com", "usatoday.com", "livescience.com"
+}</code></pre>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 43</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 10</h1>
+<h2 class="chapter-title">Code Explanation — SQLite History Storage</h2>
+
+        <h3 class="section-title">SQLite Database Persistence — Code Explanation</h3>
+        <pre><code>def save_prediction(*, mode, input_text, prediction, confidence, sources_found=None, articles_analyzed=None):
+    with _connection() as conn:
+        conn.execute(
+            "INSERT INTO prediction_history VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (created_at, mode, preview, prediction, confidence, sources_found, articles_analyzed)
+        )</code></pre>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 44</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 10</h1>
+<h2 class="chapter-title">Code Explanation — Streamlit Dashboard UI</h2>
+
+        <h3 class="section-title">Streamlit Dashboard UI — Code Explanation</h3>
+        <pre><code>st.set_page_config(page_title="Online Verification", page_icon="🔗", layout="wide")
+st.title("Online Verification")
+if st.button("Search and analyze", type="primary"):
+    verification = verify_headline(headline)
+    st.metric("Average confidence", f"{verification.consensus_confidence:.1%}")</code></pre>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 45</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 11</h1>
+<h2 class="chapter-title">System Testing & Objectives</h2>
+
+        <h3 class="section-title">Objectives of Testing</h3>
+        <ul>
+            <li>Verify correctness of all assessment operations.</li>
+            <li>Identify logical errors.</li>
+            <li>Ensure proper validation of user input and search queries.</li>
+            <li>Improve system reliability.</li>
+        </ul>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 46</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 11</h1>
+<h2 class="chapter-title">Test Cases Table</h2>
+
+        <h3 class="section-title">Test Cases</h3>
+        <table>
+            <thead><tr><th>Test Case</th><th>Input</th><th>Expected Result</th><th>Status</th></tr></thead>
+            <tbody>
+                <tr><td>Offline Prediction</td><td>Valid text string</td><td>Label & confidence returned</td><td>Pass</td></tr>
+                <tr><td>Invalid File / Text</td><td>Short / Empty text</td><td>Error message displayed</td><td>Pass</td></tr>
+                <tr><td>Online Search</td><td>"Earth is round"</td><td>Relevant sources returned</td><td>Pass</td></tr>
+                <tr><td>Stance Matching</td><td>"Earth is flat"</td><td>Refutation detected -> Fake News</td><td>Pass</td></tr>
+                <tr><td>SQLite History</td><td>New prediction run</td><td>Record logged in DB</td><td>Pass</td></tr>
+            </tbody>
+        </table>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 47</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 11</h1>
+<h2 class="chapter-title">Input Validation & Verification</h2>
+
+        <h3 class="section-title">Input Validation</h3>
+        <ul>
+            <li>Headline input must be at least 5 characters long</li>
+            <li>Text input sanitized using regex before vectorization</li>
+            <li>Search URL validated for valid HTTP/HTTPS schemes</li>
+        </ul>
+        <h3 class="section-title">Output Results</h3>
+        <p>The system generates appropriate outputs after every evaluation step:</p>
+        <ul>
+            <li>Offline Prediction: Real News vs Fake News with confidence score</li>
+            <li>Online Search: Searched results count & relevant matches</li>
+            <li>Stance Consensus: Final Verdict Card & multi-source metrics</li>
+            <li>SQLite History: Timestamped log of past queries</li>
+        </ul>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 48</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 11</h1>
+<h2 class="chapter-title">Advantages & Limitations</h2>
+
+        <h3 class="section-title">Advantages of the Project</h3>
+        <ul>
+            <li>Simple Python implementation with modular programming structure</li>
+            <li>Fast news assessment and objective scoring</li>
+        </ul>
+        <h3 class="section-title">Limitations of the Project</h3>
+        <ul>
+            <li>Console/Web-based interface</li>
+            <li>Internet connection required for live web verification and online source retrieval</li>
+            <li>In-memory session state per run</li>
+        </ul>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 49</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 11</h1>
+<h2 class="chapter-title">Challenges & Future Scope</h2>
+
+        <h3 class="section-title">Future Scope</h3>
+        <ul>
+            <li>Speech-to-text voice verification integration</li>
+            <li>Video confidence and body language analysis</li>
+            <li>Database saving for multi-user profiles</li>
+        </ul>
+        <h3 class="section-title">Challenges Faced During the Internship</h3>
+        <ul>
+            <li>Debugging false positives on scientific facts (e.g. Earth is round/flat)</li>
+            <li>Handling DDGS search provider rate-limiting with Google RSS fallbacks</li>
+            <li>Maintaining conversation state across Streamlit UI re-renders</li>
+        </ul>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 50</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 11</h1>
+<h2 class="chapter-title">Skills Gained & Testing Summary</h2>
+
+        <h3 class="section-title">Skills Gained During the Internship</h3>
+        <p><strong>Technical Skills:</strong> Python, OOP, Scikit-Learn, TF-IDF, Regex, Streamlit, SQLite, Testing.</p>
+        <p><strong>Professional Skills:</strong> Time management, technical documentation, analytical thinking.</p>
+        <h3 class="section-title">Testing Summary</h3>
+        <p>The testing process confirmed that the AI Fake News Detector performs its intended operations correctly.</p>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 51</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 12</h1>
+<h2 class="chapter-title">Internship Work Summary (Weeks 1-4)</h2>
+
+        <h3 class="section-title">Week 1 (Days 1–5)</h3>
+        <ul>
+            <li>Introduction to Python Development</li>
+            <li>IDE Setup (VS Code / PyCharm)</li>
+            <li>Requirement Analysis</li>
+            <li>Project Planning & SDLC Study</li>
+        </ul>
+        <h3 class="section-title">Week 2 (Days 6–10)</h3>
+        <ul>
+            <li>Text Cleaner Pipeline Development</li>
+            <li>Regex Text Cleaning Logic</li>
+            <li>Stopwords Filter Design</li>
+        </ul>
+        <h3 class="section-title">Week 3 (Days 11–15)</h3>
+        <ul>
+            <li>TF-IDF Feature Extraction</li>
+            <li>Logistic Regression Model Training</li>
+            <li>Model Artifact (.pkl) Serialization</li>
+        </ul>
+        <h3 class="section-title">Week 4 (Days 16–20)</h3>
+        <ul>
+            <li>FastAPI Endpoint Development</li>
+            <li>POST /predict Route Implementation</li>
+        </ul>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 52</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 12</h1>
+<h2 class="chapter-title">Internship Work Summary (Weeks 5-8)</h2>
+
+        <h3 class="section-title">Week 5 (Days 21–25)</h3>
+        <ul>
+            <li>Streamlit UI Dashboard Development</li>
+            <li>Offline Prediction Page Design</li>
+        </ul>
+        <h3 class="section-title">Week 6 (Days 26–30)</h3>
+        <ul>
+            <li>SQLite History Database Logging</li>
+            <li>Streamlit Table Layout Design</li>
+        </ul>
+        <h3 class="section-title">Week 7 (Days 31–35)</h3>
+        <ul>
+            <li>DDGS & Google RSS Search Integration</li>
+            <li>Input Validation & Error Handling</li>
+        </ul>
+        <h3 class="section-title">Week 8 (Days 36–40)</h3>
+        <ul>
+            <li>Multi-Signal Stance Engine Optimization</li>
+            <li>Final System Testing & Report Submission</li>
+        </ul>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 53</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 12</h1>
+<h2 class="chapter-title">Detailed Daily Work Log (Days 1-20)</h2>
+
+        <h3 class="section-title">Detailed Daily Work Log (Days 1–20)</h3>
+        <table>
+            <thead><tr><th style="width: 15%;">Day</th><th style="width: 85%;">Work Performed</th></tr></thead>
+            <tbody>
+                <tr><td>1</td><td>Internship orientation and project discussion</td></tr>
+                <tr><td>2</td><td>Installed Python 3.10 and VS Code IDE</td></tr>
+                <tr><td>3</td><td>Studied media monitoring requirements</td></tr>
+                <tr><td>4</td><td>Designed project structure</td></tr>
+                <tr><td>5</td><td>Created text preprocessing fields and module logic</td></tr>
+                <tr><td>6</td><td>Implemented raw text extraction</td></tr>
+                <tr><td>7</td><td>Implemented regex cleaner logic</td></tr>
+                <tr><td>8</td><td>Configured stopwords filtering</td></tr>
+                <tr><td>9</td><td>Set up Scikit-Learn environment</td></tr>
+                <tr><td>10</td><td>Tested TF-IDF feature extraction flow</td></tr>
+                <tr><td>11</td><td>Developed Logistic Regression evaluator class</td></tr>
+                <tr><td>12</td><td>Implemented confidence percentage calculation</td></tr>
+                <tr><td>13</td><td>Developed model serializer module</td></tr>
+                <tr><td>14</td><td>Added model artifact loading logic</td></tr>
+                <tr><td>15</td><td>Tested offline prediction module</td></tr>
+                <tr><td>16</td><td>Implemented FastAPI reference app</td></tr>
+                <tr><td>17</td><td>Added POST /predict endpoint</td></tr>
+                <tr><td>18</td><td>Implemented Streamlit Home dashboard</td></tr>
+                <tr><td>19</td><td>Integrated SQLite for history storage</td></tr>
+                <tr><td>20</td><td>Fixed identified bugs in inference module</td></tr>
+            </tbody>
+        </table>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 54</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 12</h1>
+<h2 class="chapter-title">Detailed Daily Work Log (Days 21-40)</h2>
+
+        <h3 class="section-title">Detailed Daily Work Log (Days 21–40)</h3>
+        <table>
+            <thead><tr><th style="width: 15%;">Day</th><th style="width: 85%;">Work Performed</th></tr></thead>
+            <tbody>
+                <tr><td>21</td><td>Developed DDGS search integration</td></tr>
+                <tr><td>22</td><td>Developed BeautifulSoup HTML article scraper</td></tr>
+                <tr><td>23</td><td>Added Google News RSS fallback search</td></tr>
+                <tr><td>24</td><td>Tested live news search query execution</td></tr>
+                <tr><td>25</td><td>Developed multi-signal stance engine</td></tr>
+                <tr><td>26</td><td>Designed Streamlit web dashboard layout</td></tr>
+                <tr><td>27</td><td>Integrated sidebar controls</td></tr>
+                <tr><td>28</td><td>Added confidence metric cards & progress bars</td></tr>
+                <tr><td>29</td><td>Built multi-page layout for Offline & Online mode</td></tr>
+                <tr><td>30</td><td>Implemented SQLite history viewer page</td></tr>
+                <tr><td>31</td><td>Added text format input validation</td></tr>
+                <tr><td>32</td><td>Added try-except network exception handling</td></tr>
+                <tr><td>33</td><td>Tested edge cases with short queries</td></tr>
+                <tr><td>34</td><td>Fixed UI state re-render bugs</td></tr>
+                <tr><td>35</td><td>Optimized online query latency</td></tr>
+                <tr><td>36</td><td>Fixed stance contradiction bugs (flat vs round earth)</td></tr>
+                <tr><td>37</td><td>Fixed logical errors in consensus calculator</td></tr>
+                <tr><td>38</td><td>Improved documentation and docstrings</td></tr>
+                <tr><td>39</td><td>Final system testing and report drafting</td></tr>
+                <tr><td>40</td><td>Final project review, report preparation and submission</td></tr>
+            </tbody>
+        </table>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 55</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 12</h1>
+<h2 class="chapter-title">Learning Outcomes Summary</h2>
+
+        <h3 class="section-title">Learning Outcomes Summary</h3>
+        <p>The internship significantly improved my technical and professional skills.</p>
+        <h4 class="subsection-title">Technical Learning</h4>
+        <ul>
+            <li>Python Programming & Object-Oriented Programming</li>
+            <li>Machine Learning & TF-IDF Feature Extraction</li>
+            <li>Text Parsing & Regex Validation</li>
+            <li>Software Testing & Debugging</li>
+            <li>Project Documentation</li>
+        </ul>
+        <h4 class="subsection-title">Professional Learning</h4>
+        <ul>
+            <li>Teamwork & Communication</li>
+            <li>Time Management</li>
+            <li>Problem Solving & Analytical Thinking</li>
+        </ul>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 56</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 13</h1>
+<h2 class="chapter-title">Conclusion</h2>
+
+        <p>The AI-Powered Fake News Detection System Using Python was successfully developed during the 40-day internship. The project automated essential media monitoring operations such as text cleaning, TF-IDF scoring, Machine Learning classification, live web coverage search, multi-signal stance consensus calculation, and persistent SQLite history logging.</p>
+        <p>The internship provided practical exposure to software development and strengthened my understanding of Python programming, object-oriented design, debugging, testing, and documentation. The completed project fulfills the objectives established at the beginning of the internship and demonstrates the application of programming concepts in a real-world media verification scenario.</p>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 57</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 14</h1>
+<h2 class="chapter-title">References</h2>
+
+        <h3 class="section-title">Books</h3>
+        <ul>
+            <li>Hands-On Machine Learning with Scikit-Learn, Keras, and TensorFlow – Aurélien Géron</li>
+            <li>Python Data Science Handbook: Essential Tools for Working with Data – Jake VanderPlas</li>
+            <li>Mastering Machine Learning with Scikit-Learn – Gavin Hackeling</li>
+            <li>Fluent Python: Clear, Concise, and Effective Programming – Luciano Ramalho</li>
+        </ul>
+        <h3 class="section-title">Websites & Documentation</h3>
+        <ul>
+            <li>Python Official Documentation: https://docs.python.org/3/</li>
+            <li>Scikit-Learn Machine Learning Guide: https://scikit-learn.org/</li>
+            <li>Streamlit Framework Documentation: https://docs.streamlit.io/</li>
+            <li>GeeksforGeeks Python Section: https://www.geeksforgeeks.org/python-programming-language/</li>
+        </ul>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 58</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 15</h1>
+<h2 class="chapter-title">Appendix — Deployed System UI Screenshots</h2>
+
+        <p>The following screenshots depict the live working deployment of the TruthScanML application accessible at <code>https://truthscanml.streamlit.app</code>:</p>
+        
+        <div style="text-align: center; margin: 6px 0;">
+            <img class="app-img" src="screenshot_home.png" alt="TruthScanML Home Dashboard UI">
+            <div style="font-size: 8pt; color: #475569; font-weight: 500; margin-top: 2px;">Figure 15.1: TruthScanML Deployed Streamlit Home Dashboard UI</div>
+        </div>
+
+        <div style="text-align: center; margin: 6px 0;">
+            <img class="app-img" src="screenshot_online.png" alt="TruthScanML Online Verification UI">
+            <div style="font-size: 8pt; color: #475569; font-weight: 500; margin-top: 2px;">Figure 15.2: Live Online Verification Execution (Chandrayaan 3 -> Real News 98.0%)</div>
+        </div>
+
+        <div style="text-align: center; margin: 6px 0;">
+            <img class="app-img" src="screenshot_sources.png" alt="Relevant Source Matches View">
+            <div style="font-size: 8pt; color: #475569; font-weight: 500; margin-top: 2px;">Figure 15.3: Multi-Source Web Article Relevance & Stance Expander Cards</div>
+        </div>
+
+        <div style="text-align: center; margin: 6px 0;">
+            <img class="app-img" src="screenshot_history.png" alt="SQLite Prediction History Log View">
+            <div style="font-size: 8pt; color: #475569; font-weight: 500; margin-top: 2px;">Figure 15.4: Persistent Local SQLite Prediction History Audit Log Table</div>
+        </div>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 59</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 16</h1>
+<h2 class="chapter-title">Final Project Summary & Achievements</h2>
+
+        <p>The AI-Powered Fake News Detection System (TruthScanML) represents a complete machine learning and web verification solution developed during the 40-day summer internship program under the mentorship of <strong>Mr. Raju DevNath</strong> at R.R. Institute of Modern Technology, Lucknow.</p>
+
+        <h3 class="section-title" style="margin-top: 15px;">Key Project Achievements</h3>
+        <ul>
+            <li>Successfully built and serialized an offline TF-IDF + Logistic Regression NLP classification model.</li>
+            <li>Integrated multi-signal web stance matching using DuckDuckGo and Google News RSS APIs.</li>
+            <li>Implemented persistent SQLite database logging with timestamped prediction records.</li>
+            <li>Designed a modern, multi-page Streamlit web user interface.</li>
+            <li>Successfully completed the project requirements of the B.Tech. Information Technology summer internship.</li>
+        </ul>
+
+        <h3 class="section-title" style="margin-top: 20px;">Project Sign-off & Verification</h3>
+        <p style="line-height: 1.7;">
+            The project has been tested across offline machine learning prediction and live online search scenarios, verifying that all system components perform reliably. The source code, trained model artifacts, and web dashboard have been submitted to the Department of Information Technology, R.R. Group of Institutions (RRGI), Lucknow.
+        </p>
+
+        <div class="sig-block" style="margin-top: 50px;">
+            <div class="sig-item">
+                <div class="sig-line"></div>
+                <p><strong>Harsh Tiwari</strong><br>Student / Candidate<br>Roll No.: 2303610130026</p>
+            </div>
+            <div class="sig-item">
+                <div class="sig-line"></div>
+                <p><strong>Mr. Raju DevNath</strong><br>Faculty Guide / Trainer<br>Department of IT, RRGI</p>
+            </div>
+        </div>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 60</span>
+        </div>
+    </div>
+    
+    <div class="page">
+        <h1 class="chapter-num">CHAPTER 16</h1>
+<h2 class="chapter-title">Final Summary & Future Enhancement Roadmap</h2>
+
+        <h3 class="section-title">Final Project Summary</h3>
+        <p>The AI-Powered Fake News Detection System (TruthScanML) represents a complete machine learning and web verification solution developed during the 40-day summer internship program under the mentorship of Mr. Raju DevNath at R.R. Institute of Modern Technology, Lucknow.</p>
+        <h4 class="subsection-title">Key Achievements</h4>
+        <ul>
+            <li>Successfully built and serialized an offline TF-IDF + Logistic Regression NLP classification model.</li>
+            <li>Integrated multi-signal web stance matching using DuckDuckGo and Google News RSS APIs.</li>
+            <li>Implemented persistent SQLite database prediction logging with timestamped prediction records.</li>
+            <li>Designed a modern, multi-page Streamlit web user interface.</li>
+            <li>Successfully completed the project requirements of the B.Tech. Information Technology summer internship.</li>
+        </ul>
+    
+        <div class="footer-header">
+            <span>AI-Powered Fake News Detection System (TruthScanML)</span>
+            <span>Summer Internship Report Page 61</span>
+        </div>
+    </div>
+    
+</body>
+</html>
