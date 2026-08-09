@@ -67,6 +67,100 @@ CONFIRM_PATTERNS = [
     r"\bofficially\s+confirmed\b",
 ]
 
+# ---------------------------------------------------------------------------
+# Fix 1 — Location / destination contradiction constants
+# ---------------------------------------------------------------------------
+
+# Canonical names for known space / geographic targets that claims often use.
+# Each word in a group is treated as naming the same body.
+LOCATION_GROUPS: list[frozenset[str]] = [
+    frozenset({"sun", "solar", "star"}),
+    frozenset({"moon", "lunar"}),
+    frozenset({"mars", "martian", "red planet"}),
+    frozenset({"earth", "terrestrial"}),
+    frozenset({"venus", "venusian"}),
+    frozenset({"jupiter", "jovian"}),
+    frozenset({"saturn"}),
+    frozenset({"mercury"}),
+    frozenset({"space station", "iss"}),
+    frozenset({"asteroid", "comet"}),
+]
+
+# All individual location words (flat set for fast membership test).
+_ALL_LOCATION_WORDS: frozenset[str] = frozenset(
+    word for group in LOCATION_GROUPS for word in group
+)
+
+
+def _group_for(location_word: str) -> frozenset[str] | None:
+    """Return the group frozenset that contains a given word, or None."""
+    for group in LOCATION_GROUPS:
+        if location_word in group:
+            return group
+    return None
+
+
+def extract_claim_location(headline: str) -> str | None:
+    """Extract a spatial target/destination word from the claim headline.
+
+    Looks for preposition-linked location phrases such as:
+      "landed on the sun", "on the moon", "to mars", "at the ISS".
+    Returns the first matched location word that belongs to a known group,
+    or None when no recognisable location is found.
+    """
+    lower = headline.lower()
+    # Ordered from most specific to most general to reduce false positives.
+    patterns = [
+        r"\blanded?\s+on\s+(?:the\s+)?(\w+)",
+        r"\blanding\s+on\s+(?:the\s+)?(\w+)",
+        r"\bcrashed?\s+(?:into|on)\s+(?:the\s+)?(\w+)",
+        r"\bon\s+(?:the\s+)?(\w+)",
+        r"\bto\s+(?:the\s+)?(\w+)",
+        r"\bat\s+(?:the\s+)?(\w+)",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, lower)
+        if match:
+            candidate = match.group(1).strip()
+            if candidate in _ALL_LOCATION_WORDS:
+                return candidate
+    return None
+
+
+def _dominant_location(text: str) -> str | None:
+    """Return whichever known location word appears most in a text block.
+
+    Used to decide which spatial target an article is actually about.
+    Returns None when no location word appears.
+    """
+    lower = text.lower()
+    counts: dict[str, int] = {}
+    for word in _ALL_LOCATION_WORDS:
+        # Whole-word match only to avoid 'martial' matching 'mars' etc.
+        count = len(re.findall(r"\b" + re.escape(word) + r"\b", lower))
+        if count:
+            counts[word] = count
+    if not counts:
+        return None
+    return max(counts, key=lambda w: counts[w])
+
+
+def _locations_contradict(claim_loc: str, article_loc: str) -> bool:
+    """Return True when claim and article refer to different known locations.
+
+    Two location words contradict when they belong to different groups —
+    e.g. 'sun' and 'moon' are in separate groups, so they contradict.
+    Two words from the same group (e.g. 'moon' and 'lunar') do not contradict.
+    """
+    if claim_loc == article_loc:
+        return False
+    claim_group = _group_for(claim_loc)
+    article_group = _group_for(article_loc)
+    if claim_group is None or article_group is None:
+        return False
+    return claim_group != article_group
+
+
 # B: Question-starter words to strip from the beginning of a search query.
 _QUESTION_STARTERS = re.compile(
     r"^(is|are|can|does|do|was|were|has|have|did|will|would|should|could|kya)\s+",
@@ -178,6 +272,12 @@ def verify_headline(headline: str) -> OnlineVerificationResult:
     else:
         analyses = tuple(analyze_source(source, match) for source, match in relevant_sources)
         consensus_label, consensus_confidence = calculate_consensus(headline, analyses)
+
+    # Fix 2: Cap confidence when no article body was actually read.
+    # Domain-name + snippet signals alone are too weak to justify high confidence.
+    articles_analyzed_count = sum(s.prediction is not None for s in analyses)
+    if articles_analyzed_count == 0 and consensus_confidence is not None:
+        consensus_confidence = min(consensus_confidence, 0.65)
 
     return OnlineVerificationResult(
         headline=headline,
@@ -434,11 +534,14 @@ def calculate_consensus(
 ) -> tuple[str | None, float | None]:
     """Return a multi-signal consensus label and confidence.
 
-    Signal priority (highest → lowest):
+    Signal priority (highest to lowest):
+      0. Location/destination contradiction (Fix 1) — checked FIRST for each source.
+         If the claim says 'sun' but the article is about 'moon', that source
+         actively contradicts the claim regardless of domain trust.
       1. Flat/round-earth hard rules (special-case scientific consensus)
       2. Debunk / confirm patterns from title + snippet
       3. Article-body debunk / confirm patterns (F)
-      4. Trusted domain with no debunk signal → mild real-news boost
+      4. Trusted domain with no debunk/contradiction signal → mild real-news boost (Fix 3)
       5. ML prediction, scaled conservatively by relevance score (E)
          — None predictions are skipped entirely (C)
     """
@@ -453,13 +556,16 @@ def calculate_consensus(
     is_flat_claim = bool(re.search(r"\b(flat\s+earth|earth\s+is\b.*flat)\b", headline_lower))
     is_round_claim = bool(re.search(r"\b(round\s+earth|earth\s+is\b.*round)\b", headline_lower))
 
+    # Fix 1: Extract the spatial target of the claim once (e.g. 'sun', 'moon', 'mars').
+    claim_location = extract_claim_location(headline)
+
     for source in sources:
         domain = urlparse(source.url).netloc.lower()
         is_trusted = any(td in domain for td in TRUSTED_DOMAINS) or any(
             td in source.publisher.lower() for td in TRUSTED_DOMAINS
         )
 
-        # Snippet + title level signals (existing)
+        # Snippet + title level signals
         snippet_text = f"{source.title} {source.snippet}".lower()
         snippet_debunk = any(re.search(p, snippet_text) for p in DEBUNK_PATTERNS)
         snippet_confirm = any(re.search(p, snippet_text) for p in CONFIRM_PATTERNS)
@@ -467,6 +573,30 @@ def calculate_consensus(
         # F: Merge with article-body level signals
         has_debunk = snippet_debunk or source.article_has_debunk
         has_confirm = snippet_confirm or source.article_has_confirm
+
+        # --- Priority 0 (Fix 1): Location contradiction check ---
+        # Use title + snippet for location detection (always available).
+        # If article body was scraped, include it too for stronger signal.
+        location_text = snippet_text
+        if source.prediction is not None:
+            # article body text is not stored directly, but its stance flags
+            # are stored; for location we reuse snippet which covers the gist.
+            pass
+
+        location_contradicted = False
+        if claim_location is not None:
+            article_location = _dominant_location(location_text)
+            if article_location is not None and _locations_contradict(claim_location, article_location):
+                location_contradicted = True
+
+        if location_contradicted:
+            # The article is about a DIFFERENT location than the claim.
+            # A trusted source saying "Chandrayaan landed on Moon" is EVIDENCE
+            # AGAINST the claim "landed on Sun", not evidence for it.
+            contradiction_weight = 3.0 if is_trusted else 2.0
+            fake_score += contradiction_weight
+            # Skip all remaining signals for this source — contradiction is definitive.
+            continue
 
         # --- Priority 1: Scientific hard-rules ---
         if is_flat_claim:
@@ -496,7 +626,8 @@ def calculate_consensus(
             weight = 2.0 if is_trusted else 1.2
             real_score += weight * 0.90
 
-        # --- Priority 4: Trusted domain with no debunk signal ---
+        # --- Priority 4: Trusted domain (Fix 3 — only when location is not contradicted) ---
+        # location_contradicted=False here (already handled above), so safe to boost.
         elif is_trusted:
             real_score += 1.5 * 0.85
 
@@ -510,8 +641,8 @@ def calculate_consensus(
             ml_confidence = source.prediction.confidence
 
             # E: Scale ML contribution conservatively by article relevance.
-            # similarity_score is already 0–1. We cap the multiplier at 1.5
-            # so a perfectly relevant article gets at most 1.5× weight.
+            # similarity_score is already 0-1. We cap the multiplier at 1.5
+            # so a perfectly relevant article gets at most 1.5x weight.
             relevance_weight = min(0.5 + source.similarity_score, 1.5)
 
             if ml_label == "Fake News":
