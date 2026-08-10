@@ -21,7 +21,8 @@ STOP_WORDS = {
 }
 
 EVENT_GROUPS = {
-    "death": {"dead", "died", "dies", "death", "killed", "murdered", "passed away"},
+    # Expanded death group to also accept alive signals so debunking articles aren't discarded
+    "death": {"dead", "died", "dies", "death", "killed", "murdered", "passed away", "alive", "safe", "well", "hoax", "rumour", "rumor"},
     "arrest": {"arrested", "arrest", "detained", "custody", "released"},
     "resignation": {"resigns", "resigned", "resignation", "steps down"},
     "election": {"wins", "won", "elected", "election", "vote", "appointed"},
@@ -131,7 +132,12 @@ def evaluate_claim_match(claim: str, article_title: str) -> ClaimMatch:
 def _normalize(text: str) -> str:
     text = text.lower()
     text = re.sub(r"\bpm\b", "prime minister", text)
-    text = re.sub(r"\b(died|dies|death|killed|passed away)\b", "dead", text)
+    # Map non-standard death phrases to ensure event detection catches them
+    text = re.sub(
+        r"\b(died|dies|death|killed|passed away|no\s+more|is\s+no\s+more|nahi\s+rahe|gujar\s+gaye|mar\s+gaye)\b",
+        "dead",
+        text
+    )
     return re.sub(r"[^a-z\s]", " ", text)
 
 

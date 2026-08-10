@@ -17,7 +17,7 @@ st.warning(
     "Offline Prediction remains available when the internet is unavailable."
 )
 st.caption(
-    "No API key is needed. The search uses DuckDuckGo first and may use the "
+    "The search uses DuckDuckGo first and may use the "
     "DDGS public-search fallback when DuckDuckGo temporarily rejects a request."
 )
 
@@ -68,17 +68,27 @@ if st.button("Search and analyze", type="primary"):
                     "At least two matching article titles are required."
                 )
             elif verification.consensus_label == "Fake News":
-                st.error("### Source-model consensus: Fake News")
+                st.error("### Verdict: Fake News")
             elif verification.consensus_label == "Real News":
-                st.success("### Source-model consensus: Real News")
-            elif verification.articles_analyzed:
-                st.info("### Source-model consensus: Mixed or inconclusive")
+                st.success("### Verdict: Real News")
             else:
-                st.warning("Relevant sources were found, but no readable article text could be analyzed.")
+                st.info("### Verdict: Inconclusive")
+
+            if verification.has_sufficient_relevant_sources:
+                st.markdown("#### Why?")
+                st.write(verification.evidence_summary)
+                
+                # Show explicit counts
+                col1, col2, col3 = st.columns(3)
+                col1.success(f"🟢 **Supports:** {verification.supporting_count}")
+                col2.error(f"🔴 **Contradicts:** {verification.contradicting_count}")
+                col3.info(f"⚪ **Neutral:** {verification.neutral_count}")
+            else:
+                st.warning("Relevant sources were found, but no readable article text could be analyzed or insufficient evidence.")
 
             st.caption(
-                "Consensus combines multi-source news coverage, fact-checking stance, "
-                "domain authority, and trained ML model predictions as a supporting decision-support signal."
+                "The engine aggregates multi-source evidence, evaluating stance, domain credibility, and independence. "
+                "The offline ML model acts as a supporting signal for neutral articles."
             )
 
             try:
@@ -111,17 +121,27 @@ if st.button("Search and analyze", type="primary"):
                     )
                     if source.snippet:
                         st.write(source.snippet)
+
                     st.link_button("Open source article", source.url)
                     st.caption(
                         f"Entity match: {source.entity_score:.0%} · "
                         f"Event match: {source.event_score:.0%} · "
                         f"Overall relevance: {source.similarity_score:.0%}"
                     )
+                    
+                    # Evidence Engine Details
+                    stance_color = {"SUPPORTS": "green", "CONTRADICTS": "red", "NEUTRAL": "blue"}.get(source.stance, "gray")
+                    st.markdown(f"**Stance:** :{stance_color}[{source.stance}]")
+                    st.caption(
+                        f"Credibility Weight: {source.credibility_score:.1f} · "
+                        f"Independent Domain: {'Yes' if source.is_independent else 'No (Duplicate)'}"
+                    )
+                    
                     st.caption(f"Accepted because: {source.acceptance_reason}")
 
                     if source.prediction is not None:
-                        st.success(
-                            f"Article ML result: {source.prediction.label} "
+                        st.info(
+                            f"Article ML Result: {source.prediction.label} "
                             f"({source.prediction.confidence:.1%} confidence)"
                         )
                     else:

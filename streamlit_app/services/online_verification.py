@@ -322,6 +322,12 @@ class SourceAnalysis:
     # F: article-body-level stance signals
     article_has_debunk: bool = False
     article_has_confirm: bool = False
+    
+    # Evidence Engine extensions
+    stance: str = "NEUTRAL"
+    credibility_score: float = 1.0
+    freshness_score: float = 1.0
+    is_independent: bool = True
 
 
 @dataclass(frozen=True)
@@ -333,6 +339,10 @@ class OnlineVerificationResult:
     sources: tuple[SourceAnalysis, ...]
     consensus_label: str | None
     consensus_confidence: float | None
+    supporting_count: int = 0
+    contradicting_count: int = 0
+    neutral_count: int = 0
+    evidence_summary: str = ""
 
     @property
     def sources_found(self) -> int:
@@ -386,15 +396,19 @@ def verify_headline(headline: str) -> OnlineVerificationResult:
     if len(relevant_sources) < MIN_RELEVANT_SOURCES:
         analyses = tuple(to_unanalyzed_source(source, match) for source, match in relevant_sources)
         consensus_label, consensus_confidence = None, None
+        supporting_count, contradicting_count, neutral_count = 0, 0, len(analyses)
+        summary = "Insufficient relevant sources found to verify this claim."
     else:
-        analyses = tuple(analyze_source(source, match) for source, match in relevant_sources)
-        consensus_label, consensus_confidence = calculate_consensus(headline, analyses)
-
-    # Fix 2: Cap confidence when no article body was actually read.
-    # Domain-name + snippet signals alone are too weak to justify high confidence.
-    articles_analyzed_count = sum(s.prediction is not None for s in analyses)
-    if articles_analyzed_count == 0 and consensus_confidence is not None:
-        consensus_confidence = min(consensus_confidence, 0.65)
+        raw_analyses = tuple(analyze_source(source, match) for source, match in relevant_sources)
+        (
+            consensus_label, 
+            consensus_confidence, 
+            analyses, 
+            supporting_count, 
+            contradicting_count, 
+            neutral_count, 
+            summary
+        ) = calculate_consensus(headline, raw_analyses)
 
     return OnlineVerificationResult(
         headline=headline,
@@ -402,6 +416,10 @@ def verify_headline(headline: str) -> OnlineVerificationResult:
         sources=analyses,
         consensus_label=consensus_label,
         consensus_confidence=consensus_confidence,
+        supporting_count=supporting_count,
+        contradicting_count=contradicting_count,
+        neutral_count=neutral_count,
+        evidence_summary=summary
     )
 
 
@@ -642,148 +660,169 @@ def to_unanalyzed_source(source: SourceResult, match: ClaimMatch) -> SourceAnaly
 
 
 # ---------------------------------------------------------------------------
-# Consensus scoring (C, E, F)
+# Evidence Aggregation & Consensus Engine
 # ---------------------------------------------------------------------------
+
+import dataclasses
+
+def _calculate_credibility(source: SourceAnalysis, domain: str) -> float:
+    # Fact-checkers get maximum credibility
+    fact_checkers = {"altnews.in", "boomlive.in", "factcrescendo.com", "vishvasnews.com", "newschecker.in", "politifact.com", "snopes.com", "factcheck.org", "fullfact.org"}
+    if any(fc in domain for fc in fact_checkers):
+        return 2.0
+    
+    # Trusted mainstream/official news get high credibility
+    if any(td in domain for td in TRUSTED_DOMAINS) or any(td in source.publisher.lower() for td in TRUSTED_DOMAINS):
+        return 1.5
+    
+    # Generic domains
+    return 1.0
+
+
+def _classify_stance(
+    source: SourceAnalysis, 
+    headline_lower: str, 
+    death_subject: str | None, 
+    claim_location: str | None
+) -> str:
+    snippet_text = f"{source.title} {source.snippet}".lower()
+    has_debunk = source.article_has_debunk or any(re.search(p, snippet_text) for p in DEBUNK_PATTERNS)
+    has_confirm = source.article_has_confirm or any(re.search(p, snippet_text) for p in CONFIRM_PATTERNS)
+    
+    # 1. Location Contradiction -> CONTRADICTS
+    if claim_location is not None:
+        article_location = _dominant_location(snippet_text)
+        if article_location is not None and _locations_contradict(claim_location, article_location):
+            return "CONTRADICTS"
+            
+    # 2. Death Contradiction -> CONTRADICTS
+    if death_subject is not None:
+        if article_confirms_person_alive(death_subject, snippet_text):
+            return "CONTRADICTS"
+            
+    # 3. Scientific Hard Rules
+    is_flat_claim = bool(re.search(r"\b(flat\s+earth|earth\s+is\b.*flat)\b", headline_lower))
+    is_round_claim = bool(re.search(r"\b(round\s+earth|earth\s+is\b.*round)\b", headline_lower))
+    if is_flat_claim:
+        if "not flat" in snippet_text or "round" in snippet_text or has_debunk:
+            return "CONTRADICTS"
+    elif is_round_claim:
+        if "round" in snippet_text or "not flat" in snippet_text or has_confirm:
+            return "SUPPORTS"
+        if has_debunk:
+            return "CONTRADICTS"
+            
+    # 4. Explicit patterns
+    if has_debunk:
+        return "CONTRADICTS"
+    if has_confirm:
+        return "SUPPORTS"
+        
+    return "NEUTRAL"
+
 
 def calculate_consensus(
     headline: str,
     sources: tuple[SourceAnalysis, ...],
-) -> tuple[str | None, float | None]:
-    """Return a multi-signal consensus label and confidence.
-
-    Signal priority (highest to lowest):
-      0a. Satire/parody domain → source excluded entirely.
-      0b. Death-claim contradiction — if headline says person died but
-          article says they are alive/active → strong fake signal.
-      0c. Location/destination contradiction (sun vs moon etc.) → fake signal.
-      1.  Flat/round-earth hard rules.
-      2.  Debunk / confirm patterns from title + snippet.
-      3.  Article-body debunk / confirm patterns (F).
-      4.  Trusted domain with no contradiction → mild real-news boost.
-      5.  ML prediction scaled by relevance score (E); None skipped (C).
-    """
-
+) -> tuple[str | None, float | None, tuple[SourceAnalysis, ...], int, int, int, str]:
+    """Return verdict, confidence, updated sources, counts, and explanation."""
+    
     if not sources:
-        return None, None
-
-    real_score = 0.0
-    fake_score = 0.0
+        return None, None, sources, 0, 0, 0, "No sources available for analysis."
 
     headline_lower = headline.lower().strip()
-    is_flat_claim = bool(re.search(r"\b(flat\s+earth|earth\s+is\b.*flat)\b", headline_lower))
-    is_round_claim = bool(re.search(r"\b(round\s+earth|earth\s+is\b.*round)\b", headline_lower))
-
-    # Fix 1: Extract the spatial target of the claim once (e.g. 'sun', 'moon', 'mars').
     claim_location = extract_claim_location(headline)
-
-    # Death-claim: check if headline claims a named person has died.
     death_subject = extract_death_subject(headline)
+    
+    updated_sources = []
+    seen_domains = set()
+    
+    real_score = 0.0
+    fake_score = 0.0
+    
+    supporting_count = 0
+    contradicting_count = 0
+    neutral_count = 0
 
     for source in sources:
         domain = urlparse(source.url).netloc.lower()
-
-        # --- Priority 0a: Skip satire/parody domains entirely ---
+        
+        # Priority 0a: Skip satire domains entirely (0 credibility, effectively hidden/ignored)
         if any(sd in domain for sd in SATIRE_DOMAINS):
             continue
-
-        is_trusted = any(td in domain for td in TRUSTED_DOMAINS) or any(
-            td in source.publisher.lower() for td in TRUSTED_DOMAINS
-        )
-
-        # Snippet + title level signals
-        snippet_text = f"{source.title} {source.snippet}".lower()
-        snippet_debunk = any(re.search(p, snippet_text) for p in DEBUNK_PATTERNS)
-        snippet_confirm = any(re.search(p, snippet_text) for p in CONFIRM_PATTERNS)
-
-        # F: Merge with article-body level signals
-        has_debunk = snippet_debunk or source.article_has_debunk
-        has_confirm = snippet_confirm or source.article_has_confirm
-
-        # --- Priority 0b: Death-claim contradiction check ---
-        # If headline says "Amitabh Bachchan died" but article says he is alive,
-        # that article is strong evidence the death claim is false.
-        if death_subject is not None:
-            alive_text = snippet_text
-            if article_confirms_person_alive(death_subject, alive_text):
-                alive_weight = 3.5 if is_trusted else 2.0
-                fake_score += alive_weight
-                continue  # This source refutes the death claim — skip other signals.
-
-        # --- Priority 0c: Location contradiction check ---
-        location_text = snippet_text
-        location_contradicted = False
-        if claim_location is not None:
-            article_location = _dominant_location(location_text)
-            if article_location is not None and _locations_contradict(claim_location, article_location):
-                location_contradicted = True
-
-        if location_contradicted:
-            contradiction_weight = 3.0 if is_trusted else 2.0
-            fake_score += contradiction_weight
-            continue
-
-        # --- Priority 1: Scientific hard-rules ---
-        if is_flat_claim:
-            body = snippet_text
-            if "not flat" in body or "round" in body or "conspiracy" in body or "myth" in body or has_debunk:
-                weight = 2.5 if is_trusted else 1.8
-                fake_score += weight * 0.95
-            else:
-                fake_score += 1.5 * 0.80
-
-        elif is_round_claim:
-            body = snippet_text
-            if "round" in body or "not flat" in body or "scientific fact" in body or has_confirm:
-                weight = 2.5 if is_trusted else 1.8
-                real_score += weight * 0.95
-            elif has_debunk:
-                fake_score += 2.0 * 0.90
-            else:
-                real_score += 1.5 * 0.80
-
-        # --- Priority 2 & 3: Debunk / confirm patterns (snippet + body) ---
-        elif has_debunk:
-            weight = 2.5 if is_trusted else 1.8
-            fake_score += weight * 0.90
-
-        elif has_confirm:
-            weight = 2.0 if is_trusted else 1.2
-            real_score += weight * 0.90
-
-        # --- Priority 4: Trusted domain (Fix 3 — only when location is not contradicted) ---
-        # location_contradicted=False here (already handled above), so safe to boost.
-        elif is_trusted:
-            real_score += 1.5 * 0.85
-
-        # --- Priority 5: ML prediction (C + E) ---
+            
+        # Source Independence: Check if we've already seen this domain
+        is_independent = domain not in seen_domains
+        seen_domains.add(domain)
+        
+        credibility = _calculate_credibility(source, domain)
+        # Downweight duplicate domains so they don't inflate confidence
+        if not is_independent:
+            credibility *= 0.2
+            
+        stance = _classify_stance(source, headline_lower, death_subject, claim_location)
+        
+        # Update metrics
+        if stance == "SUPPORTS":
+            supporting_count += 1
+            real_score += credibility * 1.5
+        elif stance == "CONTRADICTS":
+            contradicting_count += 1
+            fake_score += credibility * 1.5
         else:
-            if source.prediction is None:
-                # C: No evidence at all — skip rather than adding neutral noise
-                continue
+            neutral_count += 1
+            # ML Prediction acts as a supporting signal ONLY for neutral articles
+            if source.prediction:
+                ml_label = source.prediction.label
+                ml_conf = source.prediction.confidence
+                # Cap the ML contribution so it doesn't overpower explicit factual stances
+                ml_weight = credibility * min(0.5 + source.similarity_score, 1.2) * ml_conf
+                if ml_label == "Real News":
+                    real_score += ml_weight * 0.8
+                elif ml_label == "Fake News":
+                    fake_score += ml_weight * 0.8
 
-            ml_label = source.prediction.label
-            ml_confidence = source.prediction.confidence
-
-            # E: Scale ML contribution conservatively by article relevance.
-            # similarity_score is already 0-1. We cap the multiplier at 1.5
-            # so a perfectly relevant article gets at most 1.5x weight.
-            relevance_weight = min(0.5 + source.similarity_score, 1.5)
-
-            if ml_label == "Fake News":
-                fake_score += relevance_weight * ml_confidence
-            elif ml_label == "Real News":
-                real_score += relevance_weight * ml_confidence
-            # If label is anything else, skip (C).
-
+        updated_sources.append(dataclasses.replace(
+            source,
+            stance=stance,
+            credibility_score=credibility,
+            is_independent=is_independent
+        ))
+        
+    articles_analyzed_count = sum(s.prediction is not None for s in updated_sources)
+    
+    if not updated_sources:
+        return None, None, sources, 0, 0, 0, "All discovered sources were excluded (e.g., satire domains)."
+        
     total_score = real_score + fake_score
-    if total_score == 0:
-        return None, None
+    
+    # Zero-evidence safety & Low evidence penalty
+    if articles_analyzed_count == 0:
+        # If no articles were actually scraped, we cannot have high confidence.
+        # If there's strong snippet evidence, we cap it heavily.
+        if total_score > 0:
+            confidence = min(max(real_score, fake_score) / total_score, 0.65)
+            label = "Real News" if real_score > fake_score else "Fake News"
+            summary = "Verdict based on search snippets only (0 full articles analyzed). Confidence is capped."
+            return label, confidence, tuple(updated_sources), supporting_count, contradicting_count, neutral_count, summary
+        return None, None, tuple(updated_sources), supporting_count, contradicting_count, neutral_count, "No articles analyzed and snippets lacked explicit signals."
 
-    if real_score > fake_score:
+    if total_score < 1.0 or (contradicting_count == 0 and supporting_count == 0):
+        # Only ML signals or very weak signals exist. Do not force a verdict.
+        return None, None, tuple(updated_sources), supporting_count, contradicting_count, neutral_count, "No explicit factual confirmations or contradictions found. ML predictions alone are insufficient to verify this claim."
+
+    if real_score > fake_score * 1.5:
         confidence = min(real_score / total_score, 0.98)
-        return "Real News", confidence
-    elif fake_score > real_score:
+        label = "Real News"
+        summary = f"Strong evidence supports the claim ({supporting_count} supporting vs {contradicting_count} contradicting)."
+    elif fake_score > real_score * 1.5:
         confidence = min(fake_score / total_score, 0.98)
-        return "Fake News", confidence
+        label = "Fake News"
+        summary = f"Strong evidence contradicts the claim ({contradicting_count} contradicting vs {supporting_count} supporting)."
+    else:
+        # Conflicting or perfectly balanced weak evidence
+        label = None
+        confidence = None
+        summary = f"Evidence is conflicting or too weak to make a definitive call."
 
-    return None, None
+    return label, confidence, tuple(updated_sources), supporting_count, contradicting_count, neutral_count, summary
