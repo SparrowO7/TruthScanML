@@ -28,7 +28,7 @@ import streamlit as st
 
 from services.factcheck import FactCheckVerdict, fetch_fact_checks
 from services.inference import PredictionResult, predict_news
-from services.relevance import ClaimMatch, evaluate_claim_match
+from services.relevance import ClaimMatch, evaluate_claim_match, relevance_score
 from services.wikipedia import WikipediaCheck, wikipedia_death_check
 from utils.http_helpers import http_get_with_retry
 
@@ -76,6 +76,24 @@ FACT_CHECKER_DOMAINS = {
     "newschecker.in", "politifact.com", "snopes.com", "factcheck.org",
     "fullfact.org", "factly.in",
 }
+
+# Only these outlets can corroborate a death claim — wire services, top
+# Indian dailies, official sources, and fact-checkers. Hoax/spam pages and
+# aggregators literally headline "X died in an accident", so death reports
+# from anywhere else never count as support.
+DEATH_CREDIBLE_DOMAINS = {
+    "reuters.com", "apnews.com", "bbc.com", "bbc.co.uk",
+    "thehindu.com", "indianexpress.com", "ndtv.com",
+    "timesofindia.com", "hindustantimes.com", "pib.gov.in",
+} | FACT_CHECKER_DOMAINS
+
+# Headline shapes that mark a death story as a rumour check, not a report.
+_SUSPICIOUS_DEATH_HEADLINE = re.compile(
+    r"\?|truth\s+behind|what'?s\s+the\s+truth|reality\s+check|"
+    r"fact[-\s]?check|here'?s\s+what|know\s+the\s+truth|viral\s+claim|"
+    r"death\s+hoax|death\s+rumou?r|fake\s+news|rumou?r",
+    flags=re.IGNORECASE,
+)
 
 # Domains known to publish satire, parody, or unreliable viral content.
 # Articles from these are excluded from scoring.
@@ -274,7 +292,17 @@ def verify_headline(
         if match.accepted:
             relevant_sources.append((source, match))
 
-    if len(relevant_sources) < MIN_RELEVANT_SOURCES:
+    # Independent cross-checks run regardless of how many news sources
+    # matched — a Wikipedia alive-signal or professional fact-check can
+    # decide a death hoax even when search returned only junk titles.
+    fact_checks = _lookup_fact_checks(headline)
+    death_subject = extract_death_subject(headline)
+    wikipedia_check = wikipedia_death_check(death_subject) if death_subject else None
+    strong_independent = bool(fact_checks) or (
+        wikipedia_check is not None and wikipedia_check.stance != "NEUTRAL"
+    )
+
+    if len(relevant_sources) < MIN_RELEVANT_SOURCES and not strong_independent:
         analyses = tuple(
             to_unanalyzed_source(source, match) for source, match in relevant_sources
         )
@@ -286,23 +314,20 @@ def verify_headline(
             "INCONCLUSIVE — insufficient relevant sources found to verify "
             "this claim."
         )
-        fact_checks: tuple[FactCheckVerdict, ...] = ()
-        wikipedia_check: WikipediaCheck | None = None
     else:
-        if fast_mode:
-            raw_analyses = tuple(
-                fast_analyze_source(source, match) for source, match in relevant_sources
-            )
-        else:
-            raw_analyses = _analyze_sources_parallel(headline, relevant_sources)
+        if relevant_sources:
+            if fast_mode:
+                raw_analyses = tuple(
+                    fast_analyze_source(source, match)
+                    for source, match in relevant_sources
+                )
+            else:
+                raw_analyses = _analyze_sources_parallel(headline, relevant_sources)
 
-        if nli_enabled:
-            raw_analyses = _apply_nli_assist(headline, raw_analyses)
-        fact_checks = _lookup_fact_checks(headline)
-        death_subject = extract_death_subject(headline)
-        wikipedia_check = (
-            wikipedia_death_check(death_subject) if death_subject else None
-        )
+            if nli_enabled:
+                raw_analyses = _apply_nli_assist(headline, raw_analyses)
+        else:
+            raw_analyses = ()
 
         (
             consensus_label,
@@ -1093,7 +1118,17 @@ def _classify_stance(
         )
 
         if linked_death and not has_debunk and not _negated_death(snippet_text):
-            return "SUPPORTS"
+            # Death corroboration needs a top-tier outlet AND a headline
+            # that reads as a report, not a rumour check.
+            source_domain = registrable_domain(source.url)
+            headline_suspicious = bool(
+                _SUSPICIOUS_DEATH_HEADLINE.search(source.title)
+            )
+            if (
+                _domain_matches(source_domain, DEATH_CREDIBLE_DOMAINS)
+                and not headline_suspicious
+            ):
+                return "SUPPORTS"
 
         # Ignore generic confirmation words for death claims unless the death
         # is explicitly linked to the person (handled above).
@@ -1117,25 +1152,46 @@ def _classify_stance(
     if has_confirm:
         return "SUPPORTS"
 
-    # 5. Trusted mainstream coverage of the same entity + event supports
+    # 5. Title equivalence: a news outlet whose headline restates the claim
+    #    is corroborating it (outlets headline events they report as true).
+    #    NOT applied to death claims: hoax headlines literally restate
+    #    "X died", so death support must come only from the explicit
+    #    linked-death path above. Debunk patterns always override; fuzzy
+    #    match tolerates tense changes ("retires" vs "retired").
+    if (
+        death_subject is None
+        and not has_debunk
+        and relevance_score(headline_lower, source.title.lower()) >= 0.85
+    ):
+        return "SUPPORTS"
+
+    # 6. Trusted mainstream coverage of the same entity + event supports
     #    the claim. Relevance already required an entity AND event match,
     #    so a credible outlet reporting that exact event is corroboration.
-    #    Debunk patterns (checked above) always override this.
+    #    Debunk patterns (checked above) always override this. Death claims
+    #    are excluded — they support only via the strict tier above.
     if (
-        credibility >= 1.5
+        death_subject is None
+        and credibility >= 1.5
         and not has_debunk
         and source.event_score > 0
         and source.entity_score > 0
     ):
         return "SUPPORTS"
 
-    # 6. Local NLI assist — only for otherwise-NEUTRAL sources, and only
-    #    when the small model is confident enough to be trusted.
+    # 7. Local NLI assist — only for otherwise-NEUTRAL sources, and only
+    #    when the small model is confident enough to be trusted. For death
+    #    claims the NLI SUPPORTS side is disabled (hoax headlines entail
+    #    the claim verbatim); its CONTRADICTS side still helps spot
+    #    alive-signal articles.
+    if source.nli_stance == "CONTRADICTS" and source.nli_score >= 0.80:
+        return "CONTRADICTS"
     if (
-        source.nli_stance in {"SUPPORTS", "CONTRADICTS"}
+        death_subject is None
+        and source.nli_stance == "SUPPORTS"
         and source.nli_score >= 0.80
     ):
-        return source.nli_stance
+        return "SUPPORTS"
 
     return "NEUTRAL"
 

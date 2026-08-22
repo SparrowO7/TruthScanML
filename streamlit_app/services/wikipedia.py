@@ -97,13 +97,20 @@ def _death_sentence(extract: str) -> str | None:
 
 
 def _present_tense_bio(extract: str) -> bool:
-    """True when the lead describes the subject in present tense."""
+    """True when the lead describes the subject in present tense.
+
+    Living-person REST summaries open like "X is a ..."; deceased subjects
+    open with past tense ("X was a ..."). The old version also required a
+    birth year, but REST summary extracts often omit the "(born YYYY)"
+    parenthetical, so that check failed for every living person.
+    """
 
     lead = extract[:350]
-    has_birth = "born" in lead or re.search(r"\bb\.\s?\d{4}", lead)
-    present = re.search(r"\b(?:is|remains|continues to be)\s+(?:a|an|the)\b", lead)
-    death_free = not re.search(r"\bdied\b|\bdeath\b|\bwas killed\b", extract[:500])
-    return bool(has_birth and present and death_free)
+    present = re.match(
+        r"^[^.]*?\b(?:is|remains|continues to be)\s+(?:a|an|the)\b", lead
+    )
+    death_free = not re.search(r"\bdied\b|\bwas killed\b", extract[:600])
+    return bool(present and death_free)
 
 
 def wikipedia_death_check(person_name: str) -> WikipediaCheck | None:
