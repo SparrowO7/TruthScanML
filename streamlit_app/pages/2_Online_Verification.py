@@ -24,12 +24,6 @@ st.warning(
     "coverage and ML predictions should be checked against credible sources. "
     "Offline Prediction remains available when the internet is unavailable."
 )
-st.caption(
-    "Free search providers rotate per request (DDG -> Bing -> Google) so no "
-    "single one hits its rate limit, with GDELT as the final fallback. "
-    "Articles are extracted in parallel, plus professional fact-check lookup "
-    "and an optional local NLI model for stance assistance."
-)
 
 if "fast_mode" not in st.session_state:
     st.session_state.fast_mode = False
@@ -94,6 +88,12 @@ if st.button("Search and analyze", type="primary"):
                 st.write("⬇️ Downloading and analyzing articles in parallel")
             if st.session_state.nli_enabled and nli_ready:
                 st.write("🧠 NLI comparing claim meaning against sources")
+            elif st.session_state.nli_enabled:
+                st.write(
+                    "🧠 NLI model could not load in this app process - start "
+                    "the app with venv\\Scripts\\python.exe (or restart after "
+                    "installing sentence-transformers)"
+                )
             st.write("🧠 Checking stances, credibility and freshness")
             st.write("⚖️ Weighing evidence and source trust")
             st.write("🧮 Aggregating consensus")

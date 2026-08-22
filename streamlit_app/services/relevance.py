@@ -30,6 +30,8 @@ EVENT_GROUPS = {
     "arrest": {"arrested", "arrest", "detained", "custody", "released",
                "girftar", "giraftaar", "hua giraftaar"},
     "resignation": {"resigns", "resigned", "resignation", "steps down", "istifa"},
+    "retirement": {"retires", "retired", "retirement", "retire", "quits cricket",
+                   "hangs up his boots", "calls it quits"},
     "election": {"wins", "won", "elected", "election", "vote", "appointed",
                  "jeeta", "jeet", "chune gaye", "vote diya"},
     "disaster": {"earthquake", "flood", "fire", "cyclone", "explosion", "crash",

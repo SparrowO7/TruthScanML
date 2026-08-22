@@ -58,7 +58,11 @@ TRUSTED_DOMAINS = {
     "nasa.gov", "reuters.com", "apnews.com", "bbc.com", "bbc.co.uk",
     "bloomberg.com", "nytimes.com", "washingtonpost.com", "aljazeera.com",
     "usatoday.com", "livescience.com", "britannica.com", "wikipedia.org",
-    "nature.com", "who.int", "un.org",
+    "nature.com", "who.int", "un.org", "theguardian.com", "cnn.com",
+    "time.com", "india.com", "news18.com", "dnaindia.com",
+    # Sports / vertical coverage (credible mainstream outlets)
+    "espncricinfo.com", "cricbuzz.com", "sportskeeda.com", "espn.com",
+    "skysports.com", "wisden.com",
     # Indian mainstream news
     "thehindu.com", "ndtv.com", "indianexpress.com",
     "timesofindia.com", "hindustantimes.com", "scroll.in",
@@ -1055,6 +1059,7 @@ def _classify_stance(
     headline_lower: str,
     death_subject: str | None,
     claim_location: str | None,
+    credibility: float = 1.0,
 ) -> str:
     """Decide SUPPORTS / CONTRADICTS / NEUTRAL for one source."""
 
@@ -1112,7 +1117,19 @@ def _classify_stance(
     if has_confirm:
         return "SUPPORTS"
 
-    # 5. Local NLI assist — only for otherwise-NEUTRAL sources, and only
+    # 5. Trusted mainstream coverage of the same entity + event supports
+    #    the claim. Relevance already required an entity AND event match,
+    #    so a credible outlet reporting that exact event is corroboration.
+    #    Debunk patterns (checked above) always override this.
+    if (
+        credibility >= 1.5
+        and not has_debunk
+        and source.event_score > 0
+        and source.entity_score > 0
+    ):
+        return "SUPPORTS"
+
+    # 6. Local NLI assist — only for otherwise-NEUTRAL sources, and only
     #    when the small model is confident enough to be trusted.
     if (
         source.nli_stance in {"SUPPORTS", "CONTRADICTS"}
@@ -1185,7 +1202,9 @@ def calculate_consensus(
         # Freshness dampens stale articles without removing their voice.
         effective_credibility = credibility * (0.7 + 0.3 * source.freshness_score)
 
-        stance = _classify_stance(source, headline_lower, death_subject, claim_location)
+        stance = _classify_stance(
+            source, headline_lower, death_subject, claim_location, credibility
+        )
 
         if stance == "SUPPORTS":
             supporting_count += 1
