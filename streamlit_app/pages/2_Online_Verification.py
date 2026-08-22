@@ -202,7 +202,7 @@ if st.button("Search and analyze", type="primary"):
                 st.write(source.snippet)
 
             if source.evidence_quote:
-                st.markdown(f"> {source.evidence_quote}")
+                st.caption(f"Evidence: {source.evidence_quote}")
 
             stance_color = {
                 "SUPPORTS": "green",

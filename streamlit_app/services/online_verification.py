@@ -436,7 +436,7 @@ def _rotated_search_order() -> tuple:
     return rotated + (search_gdelt,)
 
 
-@st.cache_data(ttl=600, show_spinner=False)
+@st.cache_data(ttl=1800, show_spinner=False)
 def search_news(headline: str) -> tuple[SourceResult, ...]:
     """Find up to twenty public news results for a headline without an API key.
 
