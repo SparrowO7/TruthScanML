@@ -33,6 +33,9 @@ st.caption(
 
 if "fast_mode" not in st.session_state:
     st.session_state.fast_mode = False
+if "nli_enabled" not in st.session_state:
+    st.session_state.nli_enabled = True
+
 fast = st.checkbox(
     "⚡ Fast keyword-only check (skip full article download)",
     value=st.session_state.fast_mode,
@@ -40,20 +43,29 @@ fast = st.checkbox(
 )
 st.session_state.fast_mode = fast
 
-# Always visible NLI status - the brain chip previously vanished silently
-# when the optional model was not installed, which looked like a bug.
-try:
-    nli_on = nli_available()
-except Exception:
-    nli_on = False
-st.caption(
-    "🧠 NLI assist: "
-    + (
-        "active (local model loaded)"
-        if nli_on
-        else "off - install with `venv\\Scripts\\pip install sentence-transformers` to enable"
-    )
+nli_toggle = st.toggle(
+    "🧠 NLI assist",
+    value=st.session_state.nli_enabled,
+    help="Local AI model that compares your claim's meaning against each "
+    "article. Adds a few seconds on first use; the toggle disables it "
+    "without uninstalling anything.",
 )
+st.session_state.nli_enabled = nli_toggle
+
+# Status line reflects both the toggle and whether the model can load.
+try:
+    nli_ready = nli_available()
+except Exception:
+    nli_ready = False
+if not nli_toggle:
+    nli_status = "disabled (toggle is off)"
+elif nli_ready:
+    nli_status = "active (local model loaded)"
+else:
+    nli_status = (
+        "not installed - run `venv\\Scripts\\pip install sentence-transformers`"
+    )
+st.caption(f"🧠 NLI assist: {nli_status}")
 
 headline = st.text_input(
     "News headline or claim",
@@ -74,7 +86,9 @@ if st.button("Search and analyze", type="primary"):
             st.write("🔎 Searching news providers (rotating: DDG / Bing / Google)...")
             st.write("🧹 Filtering results relevant to your claim...")
             verification = verify_headline(
-                clean_headline, fast_mode=st.session_state.fast_mode
+                clean_headline,
+                fast_mode=st.session_state.fast_mode,
+                nli_enabled=st.session_state.nli_enabled,
             )
             st.write(
                 f"📰 {verification.search_results_found} results found, "
@@ -84,6 +98,8 @@ if st.button("Search and analyze", type="primary"):
                 st.write("⚡ Fast mode: analyzing titles and snippets...")
             else:
                 st.write("⬇️ Downloading and analyzing articles in parallel...")
+            if st.session_state.nli_enabled and nli_ready:
+                st.write("🧠 NLI comparing claim meaning against sources...")
             st.write("🧠 Checking stances, credibility and freshness...")
             st.write("⚖️ Weighing evidence and source trust...")
             st.write("🧮 Aggregating consensus...")

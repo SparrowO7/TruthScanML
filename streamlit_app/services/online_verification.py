@@ -253,11 +253,14 @@ def build_search_query(headline: str) -> str:
 # Main pipeline entry point
 # ---------------------------------------------------------------------------
 
-def verify_headline(headline: str, fast_mode: bool = False) -> OnlineVerificationResult:
+def verify_headline(
+    headline: str, fast_mode: bool = False, nli_enabled: bool = True
+) -> OnlineVerificationResult:
     """Search public news results and classify successfully extracted articles.
 
     If fast_mode is True, article extraction and ML prediction are skipped;
-    only titles and snippets are used for pattern checks.
+    only titles and snippets are used for pattern checks. When nli_enabled is
+    False the optional local NLI stance assist is skipped entirely.
     """
 
     search_results = search_news(headline)
@@ -289,7 +292,8 @@ def verify_headline(headline: str, fast_mode: bool = False) -> OnlineVerificatio
         else:
             raw_analyses = _analyze_sources_parallel(headline, relevant_sources)
 
-        raw_analyses = _apply_nli_assist(headline, raw_analyses)
+        if nli_enabled:
+            raw_analyses = _apply_nli_assist(headline, raw_analyses)
         fact_checks = _lookup_fact_checks(headline)
         death_subject = extract_death_subject(headline)
         wikipedia_check = (
