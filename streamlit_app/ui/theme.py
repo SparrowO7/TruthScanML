@@ -350,6 +350,23 @@ hr { border-color: rgba(255, 255, 255, 0.16) !important; }
     color: var(--ts-text) !important;
 }
 
+/* Toggle: keep label solid and the knob clearly visible on glass */
+[data-testid="stToggle"] label, [data-testid="stToggle"] span,
+[data-testid="stToggle"] p {
+    color: var(--ts-text) !important;
+    font-weight: 600;
+}
+
+[data-testid="stToggle"] [role="switch"] {
+    border: 1px solid rgba(255, 255, 255, 0.30);
+    box-shadow: inset 1px 1px 1px rgba(255, 255, 255, 0.25);
+}
+
+[data-testid="stToggle"] [role="switch"][aria-checked="true"] {
+    background: color-mix(in srgb, var(--primary, #6366f1) 70%, transparent);
+    border-color: rgba(255, 255, 255, 0.38);
+}
+
 /* ---------- Stance badges & chips ---------- */
 
 .badge {

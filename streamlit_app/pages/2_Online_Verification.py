@@ -36,36 +36,30 @@ if "fast_mode" not in st.session_state:
 if "nli_enabled" not in st.session_state:
     st.session_state.nli_enabled = True
 
-fast = st.checkbox(
-    "⚡ Fast keyword-only check (skip full article download)",
-    value=st.session_state.fast_mode,
-    help="Analyse only titles and snippets. Instant, but less thorough.",
-)
+# Both controls on one row: fast mode (left) and NLI assist (right).
+options_left, options_right = st.columns([3, 2])
+with options_left:
+    fast = st.checkbox(
+        "⚡ Fast keyword-only check (skip full article download)",
+        value=st.session_state.fast_mode,
+        help="Analyse only titles and snippets. Instant, but less thorough.",
+    )
+with options_right:
+    nli_toggle = st.toggle(
+        "🧠 NLI assist",
+        value=st.session_state.nli_enabled,
+        help="Local AI model that compares your claim's meaning against each "
+        "article. Adds a few seconds on first use; the toggle disables it "
+        "without uninstalling anything.",
+    )
 st.session_state.fast_mode = fast
-
-nli_toggle = st.toggle(
-    "🧠 NLI assist",
-    value=st.session_state.nli_enabled,
-    help="Local AI model that compares your claim's meaning against each "
-    "article. Adds a few seconds on first use; the toggle disables it "
-    "without uninstalling anything.",
-)
 st.session_state.nli_enabled = nli_toggle
 
-# Status line reflects both the toggle and whether the model can load.
+# Silent availability check (no status line on the page).
 try:
     nli_ready = nli_available()
 except Exception:
     nli_ready = False
-if not nli_toggle:
-    nli_status = "disabled (toggle is off)"
-elif nli_ready:
-    nli_status = "active (local model loaded)"
-else:
-    nli_status = (
-        "not installed - run `venv\\Scripts\\pip install sentence-transformers`"
-    )
-st.caption(f"🧠 NLI assist: {nli_status}")
 
 headline = st.text_input(
     "News headline or claim",
