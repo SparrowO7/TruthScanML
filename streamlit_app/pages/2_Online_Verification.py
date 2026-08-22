@@ -3,6 +3,11 @@
 import streamlit as st
 
 from database.history import HistoryDatabaseError, save_prediction
+from services.groq_crosscheck import (
+    GroqCrossCheckError,
+    cross_check_claim,
+    is_configured as groq_configured,
+)
 from services.nli_stance import nli_available
 from services.online_verification import (
     NewsSearchError,
@@ -245,6 +250,46 @@ if st.button("Search and analyze", type="primary"):
                 )
             else:
                 st.info("Article not analyzed: readable text was unavailable.")
+
+    # ---- Optional free AI second opinion (Groq) — never affects the verdict ----
+    try:
+        groq_key = st.secrets.get("GROQ_API_KEY", "")
+        groq_model = st.secrets.get("GROQ_MODEL", "openai/gpt-oss-120b")
+    except Exception:
+        groq_key, groq_model = "", "openai/gpt-oss-120b"
+
+    if groq_configured(groq_key):
+        with st.expander("🤖 AI second opinion (Groq, free) — optional", expanded=False):
+            st.caption(
+                "Asks an independent open-source LLM (via Groq's free tier) to "
+                "assess the claim using the found article titles. This is a "
+                "separate opinion — it is NOT part of the verdict above."
+            )
+            if st.button("Run AI cross-check", key="groq_crosscheck"):
+                reference = [
+                    (s.title, s.url) for s in verification.sources
+                ]
+                try:
+                    with st.spinner("Groq is assessing the claim..."):
+                        opinion = cross_check_claim(
+                            claim=clean_headline,
+                            api_key=groq_key,
+                            reference_sources=reference,
+                            model=groq_model,
+                        )
+                except GroqCrossCheckError as error:
+                    st.error(str(error))
+                else:
+                    color = {
+                        "SUPPORTED": "green",
+                        "CONTRADICTED": "red",
+                    }.get(opinion.verdict, "blue")
+                    st.markdown(
+                        f"**AI opinion:** :{color}[{opinion.verdict}] "
+                        f"(confidence: {opinion.confidence})"
+                    )
+                    st.write(opinion.summary)
+                    st.caption(f"Model: {opinion.model} · cached for 15 minutes")
 
     # ---- Save to local history (best effort) ----
     try:

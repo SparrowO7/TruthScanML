@@ -142,6 +142,19 @@ For Streamlit Community Cloud, open the app's **Settings → Secrets** and add
 the same line. Never commit or paste real keys into source code, GitHub,
 screenshots, or chats.
 
+### Optional: Groq AI second opinion (free tier)
+
+After a verdict, an optional button asks an independent open-source LLM
+(via Groq's free tier, default model `openai/gpt-oss-120b`) to assess the
+claim using the found article titles. This is a clearly-labelled **second
+opinion only** — it never feeds the weighted evidence consensus. Add the
+free key to `.streamlit/secrets.toml`:
+
+```toml
+GROQ_API_KEY = "gsk-..."
+GROQ_MODEL = "openai/gpt-oss-120b"
+```
+
 ### Wikipedia cross-check (automatic)
 
 For death claims ("X died / X mar gaye / X ka dehant"), the app performs one
