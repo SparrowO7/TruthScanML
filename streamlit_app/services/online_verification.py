@@ -1,42 +1,44 @@
-"""Headline search, article extraction, and source-level ML analysis.
+"""Headline search, article extraction, and multi-signal evidence consensus.
 
 This module deliberately keeps all network work separate from Offline
 Prediction. A search or extraction failure never changes the local pipeline.
 
-Improvements applied (A–F):
-  A  Article text extraction uses a fallback chain:
-       <article> → <main> → all <p> tags
-     so more sites yield readable text and fewer predictions are None.
-  B  Search queries are cleaned before being sent to the provider:
-       leading question words and trailing '?' are removed.
-  C  A None prediction is now skipped entirely in consensus scoring instead
-     of adding a neutral 0.5 + 0.5 that pollutes the weighted total.
-  D  Handled in relevance.py (Hinglish stopwords).
-  E  ML confidence is scaled by the article's relevance score before being
-     added to the consensus pool (conservative — no accuracy claim).
-  F  Debunk and confirm patterns are checked against the full scraped article
-     body when available, not just the title + snippet.
+Free-only architecture (no paid APIs):
+  Search chain:  DuckDuckGo (ddgs) → Bing News RSS → Google News RSS
+  Evidence:      parallel article extraction + stance patterns + ML support
+  Cross-checks:  Google Fact Check Tools (ClaimReview, optional free key)
+                 Wikipedia lead check for death claims (conservative)
+  Verdict:       weighted consensus; returns INCONCLUSIVE when evidence is
+                 insufficient or conflicting — never forces a call.
 """
 
-from dataclasses import dataclass, field
+import dataclasses
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 import re
 from typing import Any
 from urllib.parse import urlparse
 from xml.etree import ElementTree
 
-from ddgs import DDGS
 from bs4 import BeautifulSoup
-import requests
+from ddgs import DDGS
 import streamlit as st
 
+from services.factcheck import FactCheckVerdict, fetch_fact_checks
 from services.inference import PredictionResult, predict_news
 from services.relevance import ClaimMatch, evaluate_claim_match
+from services.wikipedia import WikipediaCheck, wikipedia_death_check
+from utils.http_helpers import http_get_with_retry
 
 
 MAX_SEARCH_RESULTS = 20
 MIN_ARTICLE_CHARACTERS = 200
 RELEVANCE_THRESHOLD = 0.50
 MIN_RELEVANT_SOURCES = 2
+MAX_PARALLEL_FETCHES = 6
+EXTRACTION_CACHE_SECONDS = 3_600
 HTTP_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -51,7 +53,7 @@ TRUSTED_DOMAINS = {
     "politifact.com", "snopes.com", "factcheck.org", "fullfact.org",
     # Indian fact-checkers
     "altnews.in", "boomlive.in", "pib.gov.in", "factcrescendo.com",
-    "vishvasnews.com", "newschecker.in", "indiatoday.in",
+    "vishvasnews.com", "newschecker.in", "indiatoday.in", "factly.in",
     # International wire services / broadcasters
     "nasa.gov", "reuters.com", "apnews.com", "bbc.com", "bbc.co.uk",
     "bloomberg.com", "nytimes.com", "washingtonpost.com", "aljazeera.com",
@@ -61,7 +63,14 @@ TRUSTED_DOMAINS = {
     "thehindu.com", "ndtv.com", "indianexpress.com",
     "timesofindia.com", "hindustantimes.com", "scroll.in",
     "thewire.in", "theprint.in", "moneycontrol.com", "zeenews.india.com",
-    "aajtak.in", "abplive.com",
+    "aajtak.in", "abplive.com", "thequint.com",
+}
+
+# Professional fact-check domains (highest credibility weight).
+FACT_CHECKER_DOMAINS = {
+    "altnews.in", "boomlive.in", "factcrescendo.com", "vishvasnews.com",
+    "newschecker.in", "politifact.com", "snopes.com", "factcheck.org",
+    "fullfact.org", "factly.in",
 }
 
 # Domains known to publish satire, parody, or unreliable viral content.
@@ -86,6 +95,9 @@ DEBUNK_PATTERNS = [
     r"\bdeath\s+hoax\b", r"\bdeath\s+rumou?r\b", r"\bdeath\s+news\s+fake\b",
     r"\bdied\s+hoax\b", r"\bnot\s+dead\b", r"\bstill\s+alive\b",
     r"\bafwah\b", r"\brumour\b", r"\brumor\b",
+    # Hindi / Hinglish debunk words
+    r"\bjhooth\b", r"\bjhuth[ai]\b", r"\bfarzi\b", r"\bnakli\b",
+    r"\bgalat\s+(?:khabar|news|jaankari|baat)\b", r"\bviral\s+afwah\b",
 ]
 
 # --- Real / confirmation signal patterns ---
@@ -100,7 +112,7 @@ CONFIRM_PATTERNS = [
 
 # --- Alive / person-is-fine signals (used in death-claim contradiction) ---
 ALIVE_SIGNALS = [
-    r"\balive\b", r"\bstill\s+alive\b", r"\bis\s+alive\b",
+    r"\balive\b", r"\bstill\s+alive\b", r"\bis\s+alive\b", r"\bzinda\b",
     r"\bdenies\b", r"\bdenied\b", r"\brefutes\b",
     r"\bis\s+fine\b", r"\bis\s+well\b", r"\bis\s+safe\b",
     r"\bappears\s+in\b", r"\bseen\s+at\b", r"\bspotted\b",
@@ -111,177 +123,25 @@ ALIVE_SIGNALS = [
 
 # Verb/adjective forms that signal a death claim in the headline.
 _DEATH_WORDS = re.compile(
-    r"\b(died|dead|death|passed\s+away|no\s+more|is\s+no\s+more|nahi\s+rahe|gujar\s+gaye|mar\s+gaye)\b",
+    r"\b(died|dead|death|passed\s+away|no\s+more|is\s+no\s+more|nahi\s+rahe|"
+    r"gujar\s+gaye|guzar\s+gaye|mar\s+gaya|mar\s+gaye|inteqal|wafat|"
+    r"dehant|swargwas[ie]?)\b",
     flags=re.IGNORECASE,
 )
 
-# ---------------------------------------------------------------------------
-# Fix 1 — Location / destination contradiction constants
-# ---------------------------------------------------------------------------
-
-# Canonical names for known space / geographic targets that claims often use.
-# Each word in a group is treated as naming the same body.
-LOCATION_GROUPS: list[frozenset[str]] = [
-    frozenset({"sun", "solar", "star"}),
-    frozenset({"moon", "lunar"}),
-    frozenset({"mars", "martian", "red planet"}),
-    frozenset({"earth", "terrestrial"}),
-    frozenset({"venus", "venusian"}),
-    frozenset({"jupiter", "jovian"}),
-    frozenset({"saturn"}),
-    frozenset({"mercury"}),
-    frozenset({"space station", "iss"}),
-    frozenset({"asteroid", "comet"}),
-]
-
-# All individual location words (flat set for fast membership test).
-_ALL_LOCATION_WORDS: frozenset[str] = frozenset(
-    word for group in LOCATION_GROUPS for word in group
+# Death phrase used inside sentence-level evidence checks.
+_DEATH_PHRASE = (
+    r"(?:died|dead|death|passed\s+away|no\s+more|nahi\s+rahe|"
+    r"gujar\s+gaye|guzar\s+gaye|mar\s+gaya|mar\s+gaye|inteqal|wafat|"
+    r"dehant|swargwas[ie]?)"
 )
 
-
-def _group_for(location_word: str) -> frozenset[str] | None:
-    """Return the group frozenset that contains a given word, or None."""
-    for group in LOCATION_GROUPS:
-        if location_word in group:
-            return group
-    return None
-
-
-def extract_claim_location(headline: str) -> str | None:
-    """Extract a spatial target/destination word from the claim headline.
-
-    Looks for preposition-linked location phrases such as:
-      "landed on the sun", "on the moon", "to mars", "at the ISS".
-    Returns the first matched location word that belongs to a known group,
-    or None when no recognisable location is found.
-    """
-    lower = headline.lower()
-    # Ordered from most specific to most general to reduce false positives.
-    patterns = [
-        r"\blanded?\s+on\s+(?:the\s+)?(\w+)",
-        r"\blanding\s+on\s+(?:the\s+)?(\w+)",
-        r"\bcrashed?\s+(?:into|on)\s+(?:the\s+)?(\w+)",
-        r"\bon\s+(?:the\s+)?(\w+)",
-        r"\bto\s+(?:the\s+)?(\w+)",
-        r"\bat\s+(?:the\s+)?(\w+)",
-    ]
-    for pattern in patterns:
-        match = re.search(pattern, lower)
-        if match:
-            candidate = match.group(1).strip()
-            if candidate in _ALL_LOCATION_WORDS:
-                return candidate
-    return None
-
-
-def _dominant_location(text: str) -> str | None:
-    """Return whichever known location word appears most in a text block.
-
-    Used to decide which spatial target an article is actually about.
-    Returns None when no location word appears.
-    """
-    lower = text.lower()
-    counts: dict[str, int] = {}
-    for word in _ALL_LOCATION_WORDS:
-        # Whole-word match only to avoid 'martial' matching 'mars' etc.
-        count = len(re.findall(r"\b" + re.escape(word) + r"\b", lower))
-        if count:
-            counts[word] = count
-    if not counts:
-        return None
-    return max(counts, key=lambda w: counts[w])
-
-
-def _locations_contradict(claim_loc: str, article_loc: str) -> bool:
-    """Return True when claim and article refer to different known locations.
-
-    Two location words contradict when they belong to different groups —
-    e.g. 'sun' and 'moon' are in separate groups, so they contradict.
-    Two words from the same group (e.g. 'moon' and 'lunar') do not contradict.
-    """
-    if claim_loc == article_loc:
-        return False
-    claim_group = _group_for(claim_loc)
-    article_group = _group_for(article_loc)
-    if claim_group is None or article_group is None:
-        return False
-    return claim_group != article_group
-
-
-# ---------------------------------------------------------------------------
-# Death-claim contradiction engine
-# (catches "Amitabh Bachchan died" / "PM Modi dead" type hoaxes)
-# ---------------------------------------------------------------------------
-
-def extract_death_subject(headline: str) -> str | None:
-    """Return the subject name if the headline claims someone died.
-
-    Works by checking whether a death-word appears in the headline alongside
-    a plausible named entity (two or more capitalised words, or a known-role
-    title followed by a name).  Returns the lowercased name string, or None.
-
-    Examples:
-      "Amitabh Bachchan died"       → "amitabh bachchan"
-      "PM Modi is no more"          → "modi"
-      "Chandrayaan 3 landing"       → None  (no death word)
-    """
-    if not _DEATH_WORDS.search(headline):
-        return None
-
-    # Try to extract a two-word capitalised name (e.g. "Amitabh Bachchan").
-    name_match = re.search(r"\b([A-Z][a-z]+\s+[A-Z][a-z]+)\b", headline)
-    if name_match:
-        return name_match.group(1).lower()
-
-    # Fall back to a single capitalised name after a role title (e.g. "PM Modi").
-    # The role itself is matched case-insensitively; the name must be title-case.
-    role_match = re.search(
-        r"\b(?:pm|cm|president|minister|actor|cricketer|politician|singer|director)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)",
-        headline,
-    )
-    if role_match:
-        return role_match.group(1).lower()
-
-    # Last resort: first capitalised word that appears after the start of the sentence.
-    # Avoid picking up the very first word (which may be a sentence-starter).
-    any_name = re.findall(r"\b([A-Z][a-z]{2,})\b", headline)
-    # Skip the first capitalised word if it starts the sentence
-    candidates = any_name[1:] if any_name and headline.strip().startswith(any_name[0]) else any_name
-    if candidates:
-        return candidates[0].lower()
-
-    return None
-
-
-def article_confirms_person_alive(person_name: str, article_text: str) -> bool:
-    """Return True when an article says the named person is alive / active.
-
-    Strategy:
-      1. The article must actually mention the person's name (or a meaningful
-         part of it) so we don't trigger on unrelated articles.
-      2. At least one ALIVE_SIGNAL must appear anywhere in the article text.
-
-    This is intentionally conservative: both conditions must hold.
-    """
-    lower = article_text.lower()
-
-    # Check that at least one token of the person's name appears.
-    name_tokens = [t for t in person_name.split() if len(t) > 2]
-    if not name_tokens:
-        return False
-    name_present = any(token in lower for token in name_tokens)
-    if not name_present:
-        return False
-
-    # Check for at least one alive signal.
-    return any(re.search(pattern, lower) for pattern in ALIVE_SIGNALS)
-
-
-# B: Question-starter words to strip from the beginning of a search query.
-_QUESTION_STARTERS = re.compile(
-    r"^(is|are|can|does|do|was|were|has|have|did|will|would|should|could|kya)\s+",
-    flags=re.IGNORECASE,
+# Negation guard: a death word near one of these words is a debunk, not a
+# confirmation ("family denied reports of X's death", "X death rumour").
+_NEGATION_WORDS = (
+    r"(?:denied|denies|refuted|refutes|rubbish(?:ed)?|dismissed|"
+    r"quash(?:ed)?|debunk(?:ed|s)?|hoax|rumou?rs?|afwah|jhooth|jhuth[ai]|"
+    r"farzi|nakli|baseless|misleading|fake|false)"
 )
 
 
@@ -302,11 +162,11 @@ class SourceResult:
 
 @dataclass(frozen=True)
 class SourceAnalysis:
-    """A discovered source and its optional model prediction.
+    """A discovered source with its evidence signals and ML prediction.
 
     article_has_debunk / article_has_confirm reflect pattern checks run
-    against the full scraped article body (F), not only the title + snippet.
-    They are False when article text was unavailable.
+    against the full scraped article body when available; evidence_quote is
+    the sentence that triggered the strongest signal.
     """
 
     title: str
@@ -319,15 +179,18 @@ class SourceAnalysis:
     event_score: float
     acceptance_reason: str
     prediction: PredictionResult | None
-    # F: article-body-level stance signals
     article_has_debunk: bool = False
     article_has_confirm: bool = False
-    
-    # Evidence Engine extensions
+    evidence_quote: str = ""
+
+    # Evidence-engine annotations (filled during consensus)
     stance: str = "NEUTRAL"
     credibility_score: float = 1.0
-    freshness_score: float = 1.0
+    freshness_score: float = 0.7
     is_independent: bool = True
+    # Optional local NLI model assist (None when the model is unavailable)
+    nli_stance: str | None = None
+    nli_score: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -343,6 +206,9 @@ class OnlineVerificationResult:
     contradicting_count: int = 0
     neutral_count: int = 0
     evidence_summary: str = ""
+    fact_checks: tuple[FactCheckVerdict, ...] = ()
+    wikipedia_note: str = ""
+    wikipedia_url: str = ""
 
     @property
     def sources_found(self) -> int:
@@ -358,8 +224,14 @@ class OnlineVerificationResult:
 
 
 # ---------------------------------------------------------------------------
-# B: Search query builder
+# Search query builder
 # ---------------------------------------------------------------------------
+
+_QUESTION_STARTERS = re.compile(
+    r"^(is|are|can|does|do|was|were|has|have|did|will|would|should|could|kya)\s+",
+    flags=re.IGNORECASE,
+)
+
 
 def build_search_query(headline: str) -> str:
     """Return a cleaner search query derived from the user headline.
@@ -368,10 +240,8 @@ def build_search_query(headline: str) -> str:
       - Strip leading question-starter words (Is/Are/Kya …)
       - Strip trailing question marks
       - Collapse extra whitespace
-
-    The original headline is still used for relevance matching and scoring;
-    this cleaned form is sent to the search provider only.
     """
+
     query = headline.strip()
     query = re.sub(r"\?+$", "", query).strip()
     query = _QUESTION_STARTERS.sub("", query).strip()
@@ -383,8 +253,12 @@ def build_search_query(headline: str) -> str:
 # Main pipeline entry point
 # ---------------------------------------------------------------------------
 
-def verify_headline(headline: str) -> OnlineVerificationResult:
-    """Search public news results and classify successfully extracted articles."""
+def verify_headline(headline: str, fast_mode: bool = False) -> OnlineVerificationResult:
+    """Search public news results and classify successfully extracted articles.
+
+    If fast_mode is True, article extraction and ML prediction are skipped;
+    only titles and snippets are used for pattern checks.
+    """
 
     search_results = search_news(headline)
     relevant_sources = []
@@ -394,21 +268,45 @@ def verify_headline(headline: str) -> OnlineVerificationResult:
             relevant_sources.append((source, match))
 
     if len(relevant_sources) < MIN_RELEVANT_SOURCES:
-        analyses = tuple(to_unanalyzed_source(source, match) for source, match in relevant_sources)
-        consensus_label, consensus_confidence = None, None
-        supporting_count, contradicting_count, neutral_count = 0, 0, len(analyses)
-        summary = "Insufficient relevant sources found to verify this claim."
+        analyses = tuple(
+            to_unanalyzed_source(source, match) for source, match in relevant_sources
+        )
+        consensus_label = "Inconclusive"
+        consensus_confidence = None
+        supporting_count, contradicting_count = 0, 0
+        neutral_count = len(analyses)
+        summary = (
+            "INCONCLUSIVE — insufficient relevant sources found to verify "
+            "this claim."
+        )
+        fact_checks: tuple[FactCheckVerdict, ...] = ()
+        wikipedia_check: WikipediaCheck | None = None
     else:
-        raw_analyses = tuple(analyze_source(source, match) for source, match in relevant_sources)
+        if fast_mode:
+            raw_analyses = tuple(
+                fast_analyze_source(source, match) for source, match in relevant_sources
+            )
+        else:
+            raw_analyses = _analyze_sources_parallel(headline, relevant_sources)
+
+        raw_analyses = _apply_nli_assist(headline, raw_analyses)
+        fact_checks = _lookup_fact_checks(headline)
+        death_subject = extract_death_subject(headline)
+        wikipedia_check = (
+            wikipedia_death_check(death_subject) if death_subject else None
+        )
+
         (
-            consensus_label, 
-            consensus_confidence, 
-            analyses, 
-            supporting_count, 
-            contradicting_count, 
-            neutral_count, 
-            summary
-        ) = calculate_consensus(headline, raw_analyses)
+            consensus_label,
+            consensus_confidence,
+            analyses,
+            supporting_count,
+            contradicting_count,
+            neutral_count,
+            summary,
+        ) = calculate_consensus(
+            headline, raw_analyses, fact_checks=fact_checks, wikipedia_check=wikipedia_check
+        )
 
     return OnlineVerificationResult(
         headline=headline,
@@ -419,26 +317,88 @@ def verify_headline(headline: str) -> OnlineVerificationResult:
         supporting_count=supporting_count,
         contradicting_count=contradicting_count,
         neutral_count=neutral_count,
-        evidence_summary=summary
+        evidence_summary=summary,
+        fact_checks=fact_checks,
+        wikipedia_note=(wikipedia_check.note if wikipedia_check else ""),
+        wikipedia_url=(wikipedia_check.url if wikipedia_check else ""),
     )
 
 
+def _apply_nli_assist(
+    headline: str, analyses: tuple[SourceAnalysis, ...]
+) -> tuple[SourceAnalysis, ...]:
+    """Attach local NLI stance scores to each source when the model exists.
+
+    The NLI cross-encoder (~100 MB) compares the claim against each source's
+    title + snippet (+ evidence quote). Its stance is only advisory: it is
+    consumed in ``_classify_stance`` as a conservative last-resort upgrade
+    for sources the keyword patterns left NEUTRAL.
+    """
+
+    try:
+        from services.nli_stance import score_pairs
+    except Exception:
+        return analyses
+
+    pairs = [
+        (headline, f"{a.title}. {a.snippet} {a.evidence_quote}"[:600])
+        for a in analyses
+    ]
+    try:
+        results = score_pairs(pairs)
+    except Exception:
+        return analyses
+
+    if not results or all(stance is None for stance, _ in results):
+        return analyses
+
+    updated = [
+        dataclasses.replace(a, nli_stance=stance, nli_score=score)
+        for a, (stance, score) in zip(analyses, results)
+    ]
+    return tuple(updated)
+
+
+def _analyze_sources_parallel(
+    headline: str, relevant_sources: list[tuple[SourceResult, ClaimMatch]]
+) -> tuple[SourceAnalysis, ...]:
+    """Download and analyze articles concurrently, preserving input order."""
+
+    sources = [source for source, _ in relevant_sources]
+    matches = [match for _, match in relevant_sources]
+    with ThreadPoolExecutor(max_workers=MAX_PARALLEL_FETCHES) as pool:
+        analyses = list(
+            pool.map(
+                lambda source, match: analyze_source(source, match, headline),
+                sources,
+                matches,
+            )
+        )
+    return tuple(analyses)
+
+
+def _lookup_fact_checks(headline: str) -> tuple[FactCheckVerdict, ...]:
+    """Fetch professional fact-checks when a free API key is configured."""
+
+    try:
+        api_key = st.secrets.get("FACT_CHECK_API_KEY", "")
+    except Exception:
+        api_key = ""
+
+    return fetch_fact_checks(headline, api_key)
+
+
 # ---------------------------------------------------------------------------
-# Search (B: cleaned query used here)
+# Search: DuckDuckGo → Bing News RSS → Google News RSS
 # ---------------------------------------------------------------------------
 
 @st.cache_data(ttl=600, show_spinner=False)
 def search_news(headline: str) -> tuple[SourceResult, ...]:
-    """Find up to twenty public news results for a headline without an API key.
+    """Find up to twenty public news results for a headline without an API key."""
 
-    DuckDuckGo is preferred. DDGS's automatic backend is a no-key fallback for
-    temporary provider blocks or rate limits; it does not affect Offline mode.
-    The query sent to providers is cleaned (B) while the original headline
-    is kept for all downstream relevance and scoring logic.
-    """
+    query = build_search_query(headline)
 
-    query = build_search_query(headline)  # B
-
+    # 1. DuckDuckGo via ddgs, explicit backend first.
     try:
         raw_results = DDGS().news(
             query=query,
@@ -448,6 +408,7 @@ def search_news(headline: str) -> tuple[SourceResult, ...]:
     except Exception:
         raw_results = []
 
+    # 2. ddgs automatic backend (extra providers, still keyless).
     if not raw_results:
         try:
             raw_results = DDGS().news(
@@ -458,9 +419,24 @@ def search_news(headline: str) -> tuple[SourceResult, ...]:
         except Exception:
             raw_results = []
 
+    # 3. Bing News RSS.
+    if not raw_results:
+        try:
+            raw_results = search_bing_news_rss(query)
+        except Exception:
+            raw_results = []
+
+    # 4. Google News RSS.
     if not raw_results:
         try:
             raw_results = search_google_news_rss(query)
+        except Exception:
+            raw_results = []
+
+    # 5. GDELT DOC 2.0 (global, multilingual, keyless).
+    if not raw_results:
+        try:
+            raw_results = search_gdelt(query)
         except Exception as error:
             raise NewsSearchError(
                 "Free news-search providers are temporarily unavailable or "
@@ -488,16 +464,48 @@ def search_news(headline: str) -> tuple[SourceResult, ...]:
     return tuple(sources)
 
 
-def search_google_news_rss(query: str) -> list[dict[str, str]]:
-    """Use Google News RSS as a no-key fallback when DDGS is rate-limited."""
+def search_bing_news_rss(query: str) -> list[dict[str, str]]:
+    """Use Bing News RSS as a keyless fallback search provider."""
 
-    response = requests.get(
+    response = http_get_with_retry(
+        "https://www.bing.com/news/search",
+        params={"q": query, "format": "RSS", "setlang": "en"},
+        headers=HTTP_HEADERS,
+        timeout=10,
+        retries=2,
+    )
+    root = ElementTree.fromstring(response.content)
+
+    results: list[dict[str, str]] = []
+    for item in root.findall(".//item")[:MAX_SEARCH_RESULTS]:
+        title = item.findtext("title", default="").strip()
+        url = item.findtext("link", default="").strip()
+        published_at = item.findtext("pubDate", default="").strip()
+        description = item.findtext("description", default="")
+        snippet = BeautifulSoup(description, "html.parser").get_text(" ", strip=True)
+        if title and url:
+            results.append(
+                {
+                    "title": title,
+                    "url": url,
+                    "source": urlparse(url).netloc,
+                    "date": published_at,
+                    "body": snippet,
+                }
+            )
+    return results
+
+
+def search_google_news_rss(query: str) -> list[dict[str, str]]:
+    """Use Google News RSS as a keyless fallback when DDGS is rate-limited."""
+
+    response = http_get_with_retry(
         "https://news.google.com/rss/search",
         params={"q": query, "hl": "en-IN", "gl": "IN", "ceid": "IN:en"},
         headers=HTTP_HEADERS,
         timeout=10,
+        retries=2,
     )
-    response.raise_for_status()
     root = ElementTree.fromstring(response.content)
 
     results: list[dict[str, str]] = []
@@ -518,7 +526,56 @@ def search_google_news_rss(query: str) -> list[dict[str, str]]:
                     "body": snippet,
                 }
             )
+    return results
 
+
+def search_gdelt(query: str) -> list[dict[str, str]]:
+    """Use the free GDELT DOC 2.0 API as a keyless global fallback source.
+
+    Endpoint: https://api.gdeltproject.org/api/v2/doc/doc (no key, no cost).
+    Returns up to MAX_SEARCH_RESULTS recent articles mentioning the query.
+    """
+
+    response = http_get_with_retry(
+        "https://api.gdeltproject.org/api/v2/doc/doc",
+        params={
+            "query": query,
+            "mode": "ArtList",
+            "maxrecords": MAX_SEARCH_RESULTS,
+            "format": "json",
+            "sort": "DateDesc",
+        },
+        headers=HTTP_HEADERS,
+        timeout=12,
+        retries=2,
+    )
+
+    data = response.json()
+    results: list[dict[str, str]] = []
+    for article in data.get("articles", [])[:MAX_SEARCH_RESULTS]:
+        url = str(article.get("url", "")).strip()
+        title = str(article.get("title", "")).strip()
+        if not url or not title:
+            continue
+        # seendate looks like "20260822T101500Z"; normalise to ISO.
+        published_at = ""
+        seen_date = str(article.get("seendate", "")).strip()
+        try:
+            parsed_date = datetime.strptime(seen_date, "%Y%m%dT%H%M%SZ").replace(
+                tzinfo=timezone.utc
+            )
+            published_at = parsed_date.isoformat()
+        except ValueError:
+            published_at = seen_date
+        results.append(
+            {
+                "title": title,
+                "url": url,
+                "source": str(article.get("domain", "")).strip(),
+                "date": published_at,
+                "body": "",
+            }
+        )
     return results
 
 
@@ -545,23 +602,22 @@ def to_source_result(raw_result: dict[str, Any]) -> SourceResult | None:
 
 
 # ---------------------------------------------------------------------------
-# Article extraction (A) and analysis (F)
+# Article extraction (cached, retried) and analysis
 # ---------------------------------------------------------------------------
 
+@st.cache_data(ttl=EXTRACTION_CACHE_SECONDS, show_spinner=False)
 def extract_article_text(url: str) -> str:
-    """Retrieve readable paragraph text with a fallback chain (A).
+    """Retrieve readable paragraph text with a fallback chain.
 
     Extraction order:
       1. <article> tag paragraphs  — most news sites use this semantic element
       2. <main> tag paragraphs     — common fallback container
       3. All <p> tags on the page  — original behaviour, broadest net
-
-    Each level is tried only if the previous one yields fewer than
-    MIN_ARTICLE_CHARACTERS of clean text.
     """
 
-    response = requests.get(url, headers=HTTP_HEADERS, timeout=10)
-    response.raise_for_status()
+    response = http_get_with_retry(
+        url, headers=HTTP_HEADERS, timeout=10, retries=2
+    )
     if "html" not in response.headers.get("Content-Type", "").lower():
         raise ValueError("The source did not return an HTML article.")
 
@@ -578,14 +634,12 @@ def extract_article_text(url: str) -> str:
             if p.get_text(" ", strip=True)
         )
 
-    # A: Fallback chain
     article_text = _paragraphs_from(soup.find("article"))
 
     if len(article_text) < MIN_ARTICLE_CHARACTERS:
         article_text = _paragraphs_from(soup.find("main"))
 
     if len(article_text) < MIN_ARTICLE_CHARACTERS:
-        # Broadest fallback: collect all <p> tags on the page
         article_text = " ".join(
             p.get_text(" ", strip=True)
             for p in soup.find_all("p")
@@ -598,21 +652,58 @@ def extract_article_text(url: str) -> str:
     return article_text
 
 
-def _check_patterns(text: str) -> tuple[bool, bool]:
-    """Return (has_debunk, has_confirm) for a given text block."""
+def _first_matching_sentence(text: str, pattern_groups: list[list[str]]) -> str:
+    """Return the first sentence matching any pattern, for evidence display."""
+
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+    for sentence in sentences:
+        lower = sentence.lower()
+        for patterns in pattern_groups:
+            if any(re.search(pattern, lower) for pattern in patterns):
+                return sentence.strip()[:280]
+    return ""
+
+
+def _check_patterns(text: str) -> tuple[bool, bool, str]:
+    """Return (has_debunk, has_confirm, evidence_quote) for a text block."""
+
     lower = text.lower()
     has_debunk = any(re.search(p, lower) for p in DEBUNK_PATTERNS)
     has_confirm = any(re.search(p, lower) for p in CONFIRM_PATTERNS)
-    return has_debunk, has_confirm
+
+    groups: list[list[str]] = []
+    if has_debunk:
+        groups.append(DEBUNK_PATTERNS)
+    if has_confirm:
+        groups.append(CONFIRM_PATTERNS)
+    quote = _first_matching_sentence(text, groups) if groups else ""
+
+    return has_debunk, has_confirm, quote
 
 
-def analyze_source(source: SourceResult, match: ClaimMatch) -> SourceAnalysis:
-    """Extract one article, check body-level stance signals (F), and run ML."""
+def _death_linked_quote(article_text: str, death_subject: str) -> str:
+    """Return the sentence linking the claimed person to a death word."""
+
+    if not death_subject:
+        return ""
+    last_name = death_subject.split()[-1].lower()
+    for sentence in re.split(r"(?<=[.!?])\s+", article_text):
+        lower = sentence.lower()
+        if last_name in lower and re.search(_DEATH_PHRASE, lower):
+            return sentence.strip()[:280]
+    return ""
+
+
+def analyze_source(
+    source: SourceResult, match: ClaimMatch, headline: str = ""
+) -> SourceAnalysis:
+    """Extract one article, check body-level stance signals, and run ML."""
 
     article_text: str | None = None
     prediction: PredictionResult | None = None
     article_has_debunk = False
     article_has_confirm = False
+    evidence_quote = ""
 
     try:
         article_text = extract_article_text(source.url)
@@ -621,8 +712,14 @@ def analyze_source(source: SourceResult, match: ClaimMatch) -> SourceAnalysis:
 
     if article_text:
         prediction = predict_news(article_text)
-        # F: check debunk/confirm patterns on the full article body
-        article_has_debunk, article_has_confirm = _check_patterns(article_text)
+        article_has_debunk, article_has_confirm, evidence_quote = _check_patterns(
+            article_text
+        )
+
+    if not evidence_quote:
+        death_subject = extract_death_subject(headline) if headline else None
+        if death_subject and article_text:
+            evidence_quote = _death_linked_quote(article_text, death_subject)
 
     return SourceAnalysis(
         title=source.title,
@@ -637,11 +734,41 @@ def analyze_source(source: SourceResult, match: ClaimMatch) -> SourceAnalysis:
         prediction=prediction,
         article_has_debunk=article_has_debunk,
         article_has_confirm=article_has_confirm,
+        evidence_quote=evidence_quote,
+        freshness_score=compute_freshness_score(source.published_at),
+    )
+
+
+def fast_analyze_source(source: SourceResult, match: ClaimMatch) -> SourceAnalysis:
+    """Analyze a source without downloading the full article.
+
+    Uses only the title + snippet for pattern detection and skips ML.
+    """
+
+    snippet_text = f"{source.title} {source.snippet}"
+    article_has_debunk, article_has_confirm, evidence_quote = _check_patterns(
+        snippet_text
+    )
+    return SourceAnalysis(
+        title=source.title,
+        url=source.url,
+        publisher=source.publisher,
+        published_at=source.published_at,
+        snippet=source.snippet,
+        similarity_score=match.overall_score,
+        entity_score=match.entity_score,
+        event_score=match.event_score,
+        acceptance_reason=match.reason,
+        prediction=None,
+        article_has_debunk=article_has_debunk,
+        article_has_confirm=article_has_confirm,
+        evidence_quote=evidence_quote,
+        freshness_score=compute_freshness_score(source.published_at),
     )
 
 
 def to_unanalyzed_source(source: SourceResult, match: ClaimMatch) -> SourceAnalysis:
-    """Represent a relevant source when there is insufficient evidence to analyze."""
+    """Represent a relevant source when there is insufficient evidence."""
 
     return SourceAnalysis(
         title=source.title,
@@ -656,51 +783,305 @@ def to_unanalyzed_source(source: SourceResult, match: ClaimMatch) -> SourceAnaly
         prediction=None,
         article_has_debunk=False,
         article_has_confirm=False,
+        freshness_score=compute_freshness_score(source.published_at),
     )
 
 
 # ---------------------------------------------------------------------------
-# Evidence Aggregation & Consensus Engine
+# Freshness scoring
 # ---------------------------------------------------------------------------
 
-import dataclasses
+_RELATIVE_DATE = re.compile(
+    r"(\d+)\s*(minute|hour|day|week|month)s?\s+ago", flags=re.IGNORECASE
+)
 
-def _calculate_credibility(source: SourceAnalysis, domain: str) -> float:
-    # Fact-checkers get maximum credibility
-    fact_checkers = {"altnews.in", "boomlive.in", "factcrescendo.com", "vishvasnews.com", "newschecker.in", "politifact.com", "snopes.com", "factcheck.org", "fullfact.org"}
-    if any(fc in domain for fc in fact_checkers):
+
+def _parse_published_date(value: str | None) -> datetime | None:
+    """Best-effort parse of provider date strings into an aware datetime."""
+
+    if not value:
+        return None
+    text = value.strip()
+
+    relative = _RELATIVE_DATE.search(text)
+    if relative:
+        amount = int(relative.group(1))
+        unit = relative.group(2).lower()
+        delta = {
+            "minute": timedelta(minutes=amount),
+            "hour": timedelta(hours=amount),
+            "day": timedelta(days=amount),
+            "week": timedelta(weeks=amount),
+            "month": timedelta(days=amount * 30),
+        }.get(unit)
+        if delta is not None:
+            return datetime.now(timezone.utc) - delta
+
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    except ValueError:
+        pass
+
+    try:
+        parsed = parsedate_to_datetime(text)
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        return None
+
+
+def compute_freshness_score(published_at: str | None) -> float:
+    """Score recency 0.5–1.0; undated items get a neutral 0.7."""
+
+    published = _parse_published_date(published_at)
+    if published is None:
+        return 0.7
+
+    age_days = (datetime.now(timezone.utc) - published).days
+    if age_days < 0:
+        age_days = 0
+    if age_days <= 7:
+        return 1.0
+    if age_days <= 30:
+        return 0.85
+    if age_days <= 180:
+        return 0.7
+    if age_days <= 365:
+        return 0.6
+    return 0.5
+
+
+# ---------------------------------------------------------------------------
+# Credibility (proper domain matching, no substring false positives)
+# ---------------------------------------------------------------------------
+
+def registrable_domain(url: str) -> str:
+    """Return a comparable domain like 'altnews.in' from any URL."""
+
+    netloc = urlparse(url).netloc.lower()
+    if netloc.startswith("www."):
+        netloc = netloc[4:]
+    parts = [part for part in netloc.split(":")[0].split(".") if part]
+    return ".".join(parts[-2:]) if len(parts) >= 2 else netloc
+
+
+def _domain_matches(domain: str, known_domains: set[str]) -> bool:
+    """Exact or parent-suffix match — 'notaltnews.in' must NOT match."""
+
+    return any(
+        domain == known or domain.endswith("." + known)
+        for known in known_domains
+    )
+
+
+def calculate_credibility(source: SourceAnalysis, domain: str) -> float:
+    """Credibility weight for one source (fact-checkers rank highest)."""
+
+    if _domain_matches(domain, FACT_CHECKER_DOMAINS):
         return 2.0
-    
-    # Trusted mainstream/official news get high credibility
-    if any(td in domain for td in TRUSTED_DOMAINS) or any(td in source.publisher.lower() for td in TRUSTED_DOMAINS):
+    if _domain_matches(domain, TRUSTED_DOMAINS) or any(
+        known in source.publisher.lower() for known in TRUSTED_DOMAINS
+    ):
         return 1.5
-    
-    # Generic domains
     return 1.0
 
 
+# ---------------------------------------------------------------------------
+# Location / destination contradiction (space & geographic claims)
+# ---------------------------------------------------------------------------
+
+LOCATION_GROUPS: list[frozenset[str]] = [
+    frozenset({"sun", "solar", "star"}),
+    frozenset({"moon", "lunar"}),
+    frozenset({"mars", "martian", "red planet"}),
+    frozenset({"earth", "terrestrial"}),
+    frozenset({"venus", "venusian"}),
+    frozenset({"jupiter", "jovian"}),
+    frozenset({"saturn"}),
+    frozenset({"mercury"}),
+    frozenset({"space station", "iss"}),
+    frozenset({"asteroid", "comet"}),
+]
+
+_ALL_LOCATION_WORDS: frozenset[str] = frozenset(
+    word for group in LOCATION_GROUPS for word in group
+)
+
+
+def _group_for(location_word: str) -> frozenset[str] | None:
+    for group in LOCATION_GROUPS:
+        if location_word in group:
+            return group
+    return None
+
+
+def extract_claim_location(headline: str) -> str | None:
+    """Extract a spatial target word ('sun', 'moon', 'mars'…) from the claim."""
+
+    lower = headline.lower()
+    patterns = [
+        r"\blanded?\s+on\s+(?:the\s+)?(\w+)",
+        r"\blanding\s+on\s+(?:the\s+)?(\w+)",
+        r"\bcrashed?\s+(?:into|on)\s+(?:the\s+)?(\w+)",
+        r"\bon\s+(?:the\s+)?(\w+)",
+        r"\bto\s+(?:the\s+)?(\w+)",
+        r"\bat\s+(?:the\s+)?(\w+)",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, lower)
+        if match:
+            candidate = match.group(1).strip()
+            if candidate in _ALL_LOCATION_WORDS:
+                return candidate
+    return None
+
+
+def _dominant_location(text: str) -> str | None:
+    """Return whichever known location word appears most in a text block."""
+
+    lower = text.lower()
+    counts: dict[str, int] = {}
+    for word in _ALL_LOCATION_WORDS:
+        count = len(re.findall(r"\b" + re.escape(word) + r"\b", lower))
+        if count:
+            counts[word] = count
+    if not counts:
+        return None
+    return max(counts, key=lambda word: counts[word])
+
+
+def _locations_contradict(claim_loc: str, article_loc: str) -> bool:
+    """True when claim and article refer to different known locations."""
+
+    if claim_loc == article_loc:
+        return False
+    claim_group = _group_for(claim_loc)
+    article_group = _group_for(article_loc)
+    if claim_group is None or article_group is None:
+        return False
+    return claim_group != article_group
+
+
+# ---------------------------------------------------------------------------
+# Death-claim engine
+# ---------------------------------------------------------------------------
+
+def extract_death_subject(headline: str) -> str | None:
+    """Return the subject name if the headline claims someone died."""
+
+    if not _DEATH_WORDS.search(headline):
+        return None
+
+    # Role + name first (most specific): the role word is matched
+    # case-insensitively (pm/PM), but the captured name must be strictly
+    # TitleCase — otherwise IGNORECASE would let '[A-Z]' match lowercase
+    # words like 'is', and "Actor Vikram Gokhale" would capture the role.
+    role_prefix = re.search(
+        r"\b(?:pm|cm|president|minister|actor|cricketer|politician|singer|director)\s+",
+        headline,
+        flags=re.IGNORECASE,
+    )
+    if role_prefix:
+        name_after_role = re.match(
+            r"([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)", headline[role_prefix.end():]
+        )
+        if name_after_role:
+            return name_after_role.group(1).lower()
+
+    name_match = re.search(r"\b([A-Z][a-z]+\s+[A-Z][a-z]+)\b", headline)
+    if name_match:
+        return name_match.group(1).lower()
+
+    any_name = re.findall(r"\b([A-Z][a-z]{2,})\b", headline)
+    candidates = any_name[1:] if any_name and headline.strip().startswith(any_name[0]) else any_name
+    if candidates:
+        return candidates[0].lower()
+
+    death_match = _DEATH_WORDS.search(headline)
+    if death_match:
+        before_death = headline[: death_match.start()].strip()
+        if before_death:
+            return before_death.split()[-1].lower()
+
+    return None
+
+
+def article_confirms_person_alive(person_name: str, article_text: str) -> bool:
+    """True when an article mentions the person AND shows an alive signal."""
+
+    lower = article_text.lower()
+
+    name_tokens = [token for token in person_name.split() if len(token) > 2]
+    if not name_tokens:
+        return False
+    if not any(token in lower for token in name_tokens):
+        return False
+
+    return any(re.search(pattern, lower) for pattern in ALIVE_SIGNALS)
+
+
+def _negated_death(text: str) -> bool:
+    """True when a death word appears near a denial/rumour word (same sentence).
+
+    Character-window guard (~60 chars) so 'family denied reports of X's
+    death' is treated as a debunk, not a confirmation.
+    """
+
+    return bool(
+        re.search(rf"{_NEGATION_WORDS}\b[^.!?]{{0,60}}{_DEATH_PHRASE}", text)
+        or re.search(rf"{_DEATH_PHRASE}\b[^.!?]{{0,60}}{_NEGATION_WORDS}", text)
+    )
+
+
+# ---------------------------------------------------------------------------
+# Evidence aggregation & consensus
+# ---------------------------------------------------------------------------
+
 def _classify_stance(
-    source: SourceAnalysis, 
-    headline_lower: str, 
-    death_subject: str | None, 
-    claim_location: str | None
+    source: SourceAnalysis,
+    headline_lower: str,
+    death_subject: str | None,
+    claim_location: str | None,
 ) -> str:
+    """Decide SUPPORTS / CONTRADICTS / NEUTRAL for one source."""
+
     snippet_text = f"{source.title} {source.snippet}".lower()
-    has_debunk = source.article_has_debunk or any(re.search(p, snippet_text) for p in DEBUNK_PATTERNS)
-    has_confirm = source.article_has_confirm or any(re.search(p, snippet_text) for p in CONFIRM_PATTERNS)
-    
-    # 1. Location Contradiction -> CONTRADICTS
+    has_debunk = source.article_has_debunk or any(
+        re.search(p, snippet_text) for p in DEBUNK_PATTERNS
+    )
+    has_confirm = source.article_has_confirm or any(
+        re.search(p, snippet_text) for p in CONFIRM_PATTERNS
+    )
+
+    # 1. Location contradiction → CONTRADICTS
     if claim_location is not None:
         article_location = _dominant_location(snippet_text)
         if article_location is not None and _locations_contradict(claim_location, article_location):
             return "CONTRADICTS"
-            
-    # 2. Death Contradiction -> CONTRADICTS
+
+    # 2. Death contradiction / confirmation (with negation guard)
     if death_subject is not None:
         if article_confirms_person_alive(death_subject, snippet_text):
             return "CONTRADICTS"
-            
-    # 3. Scientific Hard Rules
+
+        last_name = death_subject.split()[-1]
+        linked_death = (
+            re.search(
+                rf"\b{last_name}\b(?:\s+\w+){{0,4}}\s+{_DEATH_PHRASE}", snippet_text
+            )
+            or re.search(
+                rf"{_DEATH_PHRASE}(?:\s+\w+){{0,4}}\s+\b{last_name}\b", snippet_text
+            )
+        )
+
+        if linked_death and not has_debunk and not _negated_death(snippet_text):
+            return "SUPPORTS"
+
+        # Ignore generic confirmation words for death claims unless the death
+        # is explicitly linked to the person (handled above).
+        has_confirm = False
+
+    # 3. Scientific hard rules
     is_flat_claim = bool(re.search(r"\b(flat\s+earth|earth\s+is\b.*flat)\b", headline_lower))
     is_round_claim = bool(re.search(r"\b(round\s+earth|earth\s+is\b.*round)\b", headline_lower))
     if is_flat_claim:
@@ -711,118 +1092,229 @@ def _classify_stance(
             return "SUPPORTS"
         if has_debunk:
             return "CONTRADICTS"
-            
+
     # 4. Explicit patterns
     if has_debunk:
         return "CONTRADICTS"
     if has_confirm:
         return "SUPPORTS"
-        
+
+    # 5. Local NLI assist — only for otherwise-NEUTRAL sources, and only
+    #    when the small model is confident enough to be trusted.
+    if (
+        source.nli_stance in {"SUPPORTS", "CONTRADICTS"}
+        and source.nli_score >= 0.80
+    ):
+        return source.nli_stance
+
     return "NEUTRAL"
 
 
 def calculate_consensus(
     headline: str,
     sources: tuple[SourceAnalysis, ...],
+    fact_checks: tuple[FactCheckVerdict, ...] = (),
+    wikipedia_check: WikipediaCheck | None = None,
 ) -> tuple[str | None, float | None, tuple[SourceAnalysis, ...], int, int, int, str]:
-    """Return verdict, confidence, updated sources, counts, and explanation."""
-    
-    if not sources:
+    """Return verdict, confidence, updated sources, counts, and explanation.
+
+    Verdict labels: 'Real News', 'Fake News', 'Inconclusive', or None when
+    nothing at all could be evaluated. Evidence that is weak, conflicting, or
+    single-sourced yields 'Inconclusive' instead of a forced verdict.
+    """
+
+    if not sources and not fact_checks and wikipedia_check is None:
         return None, None, sources, 0, 0, 0, "No sources available for analysis."
 
     headline_lower = headline.lower().strip()
     claim_location = extract_claim_location(headline)
     death_subject = extract_death_subject(headline)
-    
+
     updated_sources = []
-    seen_domains = set()
-    
+    seen_domains: set[str] = set()
+
     real_score = 0.0
     fake_score = 0.0
-    
+
     supporting_count = 0
     contradicting_count = 0
     neutral_count = 0
 
+    # Hard-science claims (space destinations, earth shape) rest on the
+    # contradiction engine, so a single decisive source may carry them.
+    is_science_claim = bool(
+        re.search(
+            r"\b(flat\s+earth|round\s+earth|earth\s+is\b.*(?:flat|round))\b",
+            headline_lower,
+        )
+    )
+    strong_evidence = (
+        any(check.stance in {"SUPPORTS", "CONTRADICTS"} for check in fact_checks)
+        or (wikipedia_check is not None and wikipedia_check.stance != "NEUTRAL")
+        or claim_location is not None
+        or is_science_claim
+    )
+
     for source in sources:
-        domain = urlparse(source.url).netloc.lower()
-        
-        # Priority 0a: Skip satire domains entirely (0 credibility, effectively hidden/ignored)
-        if any(sd in domain for sd in SATIRE_DOMAINS):
+        domain = registrable_domain(source.url)
+
+        # Satire domains are excluded entirely.
+        if _domain_matches(domain, SATIRE_DOMAINS):
             continue
-            
-        # Source Independence: Check if we've already seen this domain
+
         is_independent = domain not in seen_domains
         seen_domains.add(domain)
-        
-        credibility = _calculate_credibility(source, domain)
-        # Downweight duplicate domains so they don't inflate confidence
+
+        credibility = calculate_credibility(source, domain)
         if not is_independent:
             credibility *= 0.2
-            
+
+        # Freshness dampens stale articles without removing their voice.
+        effective_credibility = credibility * (0.7 + 0.3 * source.freshness_score)
+
         stance = _classify_stance(source, headline_lower, death_subject, claim_location)
-        
-        # Update metrics
+
         if stance == "SUPPORTS":
             supporting_count += 1
-            real_score += credibility * 1.5
+            real_score += effective_credibility * 1.5
         elif stance == "CONTRADICTS":
             contradicting_count += 1
-            fake_score += credibility * 1.5
+            fake_score += effective_credibility * 1.5
         else:
             neutral_count += 1
-            # ML Prediction acts as a supporting signal ONLY for neutral articles
+            # ML prediction is a supporting signal ONLY for neutral articles,
+            # capped so it can never overpower explicit factual stances.
             if source.prediction:
                 ml_label = source.prediction.label
                 ml_conf = source.prediction.confidence
-                # Cap the ML contribution so it doesn't overpower explicit factual stances
-                ml_weight = credibility * min(0.5 + source.similarity_score, 1.2) * ml_conf
+                ml_weight = (
+                    effective_credibility
+                    * min(0.5 + source.similarity_score, 1.2)
+                    * ml_conf
+                )
                 if ml_label == "Real News":
                     real_score += ml_weight * 0.8
                 elif ml_label == "Fake News":
                     fake_score += ml_weight * 0.8
 
-        updated_sources.append(dataclasses.replace(
-            source,
-            stance=stance,
-            credibility_score=credibility,
-            is_independent=is_independent
-        ))
-        
-    articles_analyzed_count = sum(s.prediction is not None for s in updated_sources)
-    
-    if not updated_sources:
-        return None, None, sources, 0, 0, 0, "All discovered sources were excluded (e.g., satire domains)."
-        
+        updated_sources.append(
+            dataclasses.replace(
+                source,
+                stance=stance,
+                credibility_score=credibility,
+                is_independent=is_independent,
+            )
+        )
+
+    # Professional fact-check verdicts (ClaimReview) carry the most weight.
+    for check in fact_checks:
+        if check.stance == "SUPPORTS":
+            supporting_count += 1
+            real_score += 2.5 * 1.5
+        elif check.stance == "CONTRADICTS":
+            contradicting_count += 1
+            fake_score += 2.5 * 1.5
+
+    # Wikipedia is exactly one conservative evidence source for death claims.
+    if wikipedia_check is not None and wikipedia_check.stance != "NEUTRAL":
+        if wikipedia_check.stance == "SUPPORTS":
+            supporting_count += 1
+            real_score += 2.0 * 1.5
+        else:
+            contradicting_count += 1
+            fake_score += 2.0 * 1.5
+
+    if not updated_sources and not fact_checks and wikipedia_check is None:
+        return (
+            "Inconclusive", None, sources, 0, 0, 0,
+            "All discovered sources were excluded (e.g., satire domains).",
+        )
+
     total_score = real_score + fake_score
-    
-    # Zero-evidence safety & Low evidence penalty
+    articles_analyzed_count = sum(s.prediction is not None for s in updated_sources)
+
+    # Zero full articles analyzed: snippets may carry signals, but capped and
+    # still subject to the 1.5× margin rule — equal or close scores stay
+    # Inconclusive rather than defaulting to whichever side tied-breaks.
     if articles_analyzed_count == 0:
-        # If no articles were actually scraped, we cannot have high confidence.
-        # If there's strong snippet evidence, we cap it heavily.
         if total_score > 0:
-            confidence = min(max(real_score, fake_score) / total_score, 0.65)
-            label = "Real News" if real_score > fake_score else "Fake News"
-            summary = "Verdict based on search snippets only (0 full articles analyzed). Confidence is capped."
-            return label, confidence, tuple(updated_sources), supporting_count, contradicting_count, neutral_count, summary
-        return None, None, tuple(updated_sources), supporting_count, contradicting_count, neutral_count, "No articles analyzed and snippets lacked explicit signals."
+            enough_stances = (
+                supporting_count + contradicting_count >= 2 or strong_evidence
+            )
+            if enough_stances and real_score > fake_score * 1.5:
+                confidence = min(real_score / total_score, 0.65)
+                return (
+                    "Real News", confidence, tuple(updated_sources),
+                    supporting_count, contradicting_count, neutral_count,
+                    "Verdict based on search snippets and pattern signals only "
+                    "(0 full articles analyzed). Confidence is capped.",
+                )
+            if enough_stances and fake_score > real_score * 1.5:
+                confidence = min(fake_score / total_score, 0.65)
+                return (
+                    "Fake News", confidence, tuple(updated_sources),
+                    supporting_count, contradicting_count, neutral_count,
+                    "Verdict based on search snippets and pattern signals only "
+                    "(0 full articles analyzed). Confidence is capped.",
+                )
+            return (
+                "Inconclusive", None, tuple(updated_sources),
+                supporting_count, contradicting_count, neutral_count,
+                "INCONCLUSIVE — snippet signals alone were too few, too weak, "
+                "or too conflicting to verify this claim.",
+            )
+        return (
+            "Inconclusive", None, tuple(updated_sources),
+            supporting_count, contradicting_count, neutral_count,
+            "INCONCLUSIVE — no readable articles and no explicit signals were "
+            "found for this claim.",
+        )
 
     if total_score < 1.0 or (contradicting_count == 0 and supporting_count == 0):
-        # Only ML signals or very weak signals exist. Do not force a verdict.
-        return None, None, tuple(updated_sources), supporting_count, contradicting_count, neutral_count, "No explicit factual confirmations or contradictions found. ML predictions alone are insufficient to verify this claim."
+        return (
+            "Inconclusive", None, tuple(updated_sources),
+            supporting_count, contradicting_count, neutral_count,
+            "INCONCLUSIVE — no explicit factual confirmations or contradictions "
+            "found. ML predictions alone are insufficient to verify this claim.",
+        )
 
-    if real_score > fake_score * 1.5:
+    # A verdict needs a 1.5× margin AND at least two explicit stances, unless
+    # a professional fact-check or explicit Wikipedia evidence is present.
+    enough_stances = (supporting_count + contradicting_count) >= 2 or strong_evidence
+
+    if real_score > fake_score * 1.5 and enough_stances:
         confidence = min(real_score / total_score, 0.98)
-        label = "Real News"
-        summary = f"Strong evidence supports the claim ({supporting_count} supporting vs {contradicting_count} contradicting)."
-    elif fake_score > real_score * 1.5:
-        confidence = min(fake_score / total_score, 0.98)
-        label = "Fake News"
-        summary = f"Strong evidence contradicts the claim ({contradicting_count} contradicting vs {supporting_count} supporting)."
-    else:
-        # Conflicting or perfectly balanced weak evidence
-        label = None
-        confidence = None
-        summary = f"Evidence is conflicting or too weak to make a definitive call."
+        summary = (
+            f"Strong evidence supports the claim ({supporting_count} supporting "
+            f"vs {contradicting_count} contradicting)."
+        )
+        return (
+            "Real News", confidence, tuple(updated_sources),
+            supporting_count, contradicting_count, neutral_count, summary,
+        )
 
-    return label, confidence, tuple(updated_sources), supporting_count, contradicting_count, neutral_count, summary
+    if fake_score > real_score * 1.5 and enough_stances:
+        confidence = min(fake_score / total_score, 0.98)
+        summary = (
+            f"Strong evidence contradicts the claim ({contradicting_count} "
+            f"contradicting vs {supporting_count} supporting)."
+        )
+        return (
+            "Fake News", confidence, tuple(updated_sources),
+            supporting_count, contradicting_count, neutral_count, summary,
+        )
+
+    if not enough_stances:
+        return (
+            "Inconclusive", None, tuple(updated_sources),
+            supporting_count, contradicting_count, neutral_count,
+            "INCONCLUSIVE — only a single weak signal was found; reliable "
+            "evidence is insufficient for a verdict.",
+        )
+
+    return (
+        "Inconclusive", None, tuple(updated_sources),
+        supporting_count, contradicting_count, neutral_count,
+        "INCONCLUSIVE — evidence is conflicting or too weak to make a "
+        "definitive call.",
+    )

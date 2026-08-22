@@ -4,9 +4,12 @@ import streamlit as st
 
 from database.history import HistoryDatabaseError, save_prediction
 from services.inference import ModelLoadError, predict_news
+from ui.theme import inject_theme, render_html, verdict_ring_html
 
 
 st.set_page_config(page_title="Offline Prediction", page_icon="📝", layout="wide")
+
+inject_theme()
 
 st.title("Offline Prediction")
 st.caption("Classify pasted news text without an internet connection.")
@@ -35,10 +38,26 @@ if st.button("Analyze news", type="primary"):
                 "vectorizer have not been changed."
             )
         else:
-            if result.label == "Fake News":
-                st.error("### Prediction: Fake News")
-            else:
-                st.success("### Prediction: Real News")
+            kind = "fake" if result.label == "Fake News" else "real"
+            icon = "🚫" if kind == "fake" else "✅"
+            title = "FAKE NEWS" if kind == "fake" else "REAL NEWS"
+            sub = (
+                "The model's patterns suggest this text resembles fake news."
+                if kind == "fake"
+                else "The model's patterns suggest this text resembles real news."
+            )
+            ring_html = verdict_ring_html(result.confidence, "CONFIDENCE", kind)
+            render_html(
+                f"""
+                <div class="verdict-banner {kind}">
+                    {ring_html}
+                    <div>
+                        <p class="v-title">{icon} {title}</p>
+                        <p class="v-sub">{sub}</p>
+                    </div>
+                </div>
+                """
+            )
 
             prediction_column, confidence_column = st.columns(2)
             prediction_column.metric("Model output", result.label)

@@ -3,9 +3,12 @@
 import streamlit as st
 
 from database.history import HistoryDatabaseError, clear_history, list_history
+from ui.theme import inject_theme
 
 
 st.set_page_config(page_title="Prediction History", page_icon="🕘", layout="wide")
+
+inject_theme()
 
 st.title("Prediction History")
 st.caption("Review recent Offline Prediction and Online Verification results.")

@@ -1,12 +1,19 @@
-"""Headline-based online verification with web-source discovery."""
+"""Online Verification — colorful verdict UI on the evidence engine."""
 
 import streamlit as st
 
 from database.history import HistoryDatabaseError, save_prediction
-from services.online_verification import NewsSearchError, verify_headline
+from services.online_verification import (
+    NewsSearchError,
+    build_search_query,
+    verify_headline,
+)
+from ui.theme import inject_theme, render_html, verdict_ring_html
 
 
 st.set_page_config(page_title="Online Verification", page_icon="🔗", layout="wide")
+
+inject_theme()
 
 st.title("Online Verification")
 st.caption("Search news coverage for a headline and analyze readable source articles.")
@@ -17,9 +24,19 @@ st.warning(
     "Offline Prediction remains available when the internet is unavailable."
 )
 st.caption(
-    "The search uses DuckDuckGo first and may use the "
-    "DDGS public-search fallback when DuckDuckGo temporarily rejects a request."
+    "Free search chain: DuckDuckGo → Bing News → Google News → GDELT, with "
+    "parallel article extraction, professional fact-check lookup, and an "
+    "optional local NLI model for stance assistance."
 )
+
+if "fast_mode" not in st.session_state:
+    st.session_state.fast_mode = False
+fast = st.checkbox(
+    "⚡ Fast keyword-only check (skip full article download)",
+    value=st.session_state.fast_mode,
+    help="Analyse only titles and snippets. Instant, but less thorough.",
+)
+st.session_state.fast_mode = fast
 
 headline = st.text_input(
     "News headline or claim",
@@ -28,121 +45,175 @@ headline = st.text_input(
 )
 
 if st.button("Search and analyze", type="primary"):
-    if len(headline.strip()) < 5:
+    clean_headline = headline.strip()
+    if len(clean_headline) < 5:
         st.warning("Enter a more specific headline or claim before searching.")
+        st.stop()
+
+    try:
+        with st.status(
+            f"Verifying: “{build_search_query(clean_headline)}”…", expanded=True
+        ) as status:
+            st.write("🔎 Searching news providers (DuckDuckGo → Bing → Google → GDELT)…")
+            st.write("🧹 Filtering results relevant to your claim…")
+            verification = verify_headline(
+                clean_headline, fast_mode=st.session_state.fast_mode
+            )
+            st.write(
+                f"📰 {verification.search_results_found} results found, "
+                f"{verification.sources_found} relevant sources."
+            )
+            st.write("🧠 Checking stances, credibility and freshness…")
+            st.write("🧮 Aggregating consensus…")
+            status.update(label="Verification complete", state="complete", expanded=False)
+    except NewsSearchError as error:
+        st.error(str(error))
+        st.stop()
+    except Exception:
+        st.error(
+            "Online verification could not be completed. Offline Prediction "
+            "and the saved model are unaffected."
+        )
+        st.stop()
+
+    label = verification.consensus_label or "Inconclusive"
+    confidence = verification.consensus_confidence
+
+    # ---- Metrics row (classic look) ----
+    metrics = st.columns(4)
+    metrics[0].metric("Results searched", verification.search_results_found)
+    metrics[1].metric("Relevant sources", verification.sources_found)
+    metrics[2].metric("Articles analyzed", verification.articles_analyzed)
+    metrics[3].metric(
+        "Average confidence",
+        f"{confidence:.1%}" if confidence is not None else "Not available",
+    )
+
+    # ---- Colorful verdict banner (green / red / blue) ----
+    if not verification.sources_found:
+        st.warning(
+            "No sufficiently relevant news articles were found for this claim.\n\n"
+            "Possible reasons: the claim is too generic, very recent, or the "
+            "search engine returned unrelated results."
+        )
+    elif label == "Fake News":
+        st.error("### 🚫 Verdict: Fake News")
+    elif label == "Real News":
+        st.success("### ✅ Verdict: Real News")
     else:
-        try:
-            with st.spinner("Searching news sources and analyzing readable articles..."):
-                verification = verify_headline(headline)
-        except NewsSearchError as error:
-            st.error(str(error))
-        except Exception:
-            st.error(
-                "Online verification could not be completed. Offline Prediction "
-                "and the saved model are unaffected."
+        st.info("### ⚖️ Verdict: Inconclusive")
+
+    # ---- Why? — glass ring card + evidence summary ----
+    if verification.has_sufficient_relevant_sources or verification.evidence_summary:
+        st.markdown("#### Why?")
+        if confidence is not None:
+            kind = {"Real News": "real", "Fake News": "fake"}.get(label, "inconcl")
+            ring_html = verdict_ring_html(confidence, "CONFIDENCE", kind)
+            render_html(
+                f"""
+                <div class="verdict-banner {kind}" style="padding:0.9rem 1.2rem;">
+                    {ring_html}
+                    <div>
+                        <p class="v-sub" style="font-size:0.95rem;color:inherit;">
+                            {verification.evidence_summary}
+                        </p>
+                    </div>
+                </div>
+                """
             )
         else:
-            metrics = st.columns(4)
-            metrics[0].metric("Results searched", verification.search_results_found)
-            metrics[1].metric("Relevant sources", verification.sources_found)
-            metrics[2].metric(
-                "Articles analyzed",
-                verification.articles_analyzed,
-            )
-            metrics[3].metric(
-                "Average confidence",
-                f"{verification.consensus_confidence:.1%}"
-                if verification.consensus_confidence is not None
-                else "Not available",
-            )
+            st.write(verification.evidence_summary)
 
-            if not verification.sources_found:
-                st.warning(
-                    "No sufficiently relevant news articles were found for this claim.\n\n"
-                    "Possible reasons: the claim is too generic, very recent, or the "
-                    "search engine returned unrelated results."
-                )
-            elif not verification.has_sufficient_relevant_sources:
-                st.warning(
-                    "Unable to verify this claim with sufficient relevant sources. "
-                    "At least two matching article titles are required."
-                )
-            elif verification.consensus_label == "Fake News":
-                st.error("### Verdict: Fake News")
-            elif verification.consensus_label == "Real News":
-                st.success("### Verdict: Real News")
-            else:
-                st.info("### Verdict: Inconclusive")
+        # ---- Colorful explicit counts ----
+        col1, col2, col3 = st.columns(3)
+        col1.success(f"🟢 **Supports:** {verification.supporting_count}")
+        col2.error(f"🔴 **Contradicts:** {verification.contradicting_count}")
+        col3.info(f"⚪ **Neutral:** {verification.neutral_count}")
+        st.caption(
+            "Stance counts cover every relevant source (snippets included). "
+            "'Articles analyzed' counts pages downloaded and run through the "
+            "ML model — a lower number means some sites blocked automated reading."
+        )
 
-            if verification.has_sufficient_relevant_sources:
-                st.markdown("#### Why?")
-                st.write(verification.evidence_summary)
-                
-                # Show explicit counts
-                col1, col2, col3 = st.columns(3)
-                col1.success(f"🟢 **Supports:** {verification.supporting_count}")
-                col2.error(f"🔴 **Contradicts:** {verification.contradicting_count}")
-                col3.info(f"⚪ **Neutral:** {verification.neutral_count}")
-            else:
-                st.warning("Relevant sources were found, but no readable article text could be analyzed or insufficient evidence.")
+    # ---- Professional fact-checks (ClaimReview) ----
+    if verification.fact_checks:
+        st.markdown("#### 🏛️ Professional fact-checks")
+        for check in verification.fact_checks:
+            color = {"SUPPORTS": "green", "CONTRADICTS": "red"}.get(check.stance, "blue")
+            with st.expander(f"{check.publisher}: {check.title}", expanded=False):
+                st.markdown(f"**Rating:** :{color}[{check.rating}]")
+                if check.claim_text:
+                    st.caption(f"Checked claim: {check.claim_text}")
+                st.link_button("Open fact-check article", check.url)
 
+    # ---- Wikipedia signal ----
+    if verification.wikipedia_note:
+        with st.expander("📚 Wikipedia death-claim check", expanded=False):
+            st.write(verification.wikipedia_note)
+            if verification.wikipedia_url:
+                st.link_button("Open Wikipedia article", verification.wikipedia_url)
+
+    # ---- Source matches (classic colorful expanders) ----
+    st.subheader("Relevant source matches")
+    st.caption(
+        "Event claims use entity + event matching; entity-only searches use "
+        "entity matching; general topics use relevance matching."
+    )
+    if not verification.sources:
+        st.info("None of the searched article titles matched this claim closely enough.")
+    for source in verification.sources:
+        with st.expander(source.title, expanded=False):
             st.caption(
-                "The engine aggregates multi-source evidence, evaluating stance, domain credibility, and independence. "
-                "The offline ML model acts as a supporting signal for neutral articles."
+                " · ".join(value for value in (source.publisher, source.published_at) if value)
             )
+            if source.snippet:
+                st.write(source.snippet)
 
-            try:
-                save_prediction(
-                    mode="Online",
-                    input_text=headline,
-                    prediction=verification.consensus_label or "Inconclusive",
-                    confidence=verification.consensus_confidence,
-                    sources_found=verification.sources_found,
-                    articles_analyzed=verification.articles_analyzed,
-                )
-            except HistoryDatabaseError:
-                st.warning("Verification completed, but it could not be saved to local history.")
+            if source.evidence_quote:
+                st.markdown(f"> {source.evidence_quote}")
 
-            st.subheader("Relevant source matches")
+            stance_color = {
+                "SUPPORTS": "green",
+                "CONTRADICTS": "red",
+                "NEUTRAL": "blue",
+            }.get(source.stance, "gray")
+            nli_note = (
+                f" · 🧠 NLI {source.nli_stance} ({source.nli_score:.0%})"
+                if source.nli_stance
+                else ""
+            )
+            st.markdown(f"**Stance:** :{stance_color}[{source.stance}]{nli_note}")
             st.caption(
-                "Event claims use entity + event matching; entity-only searches use "
-                "entity matching; general topics use relevance matching."
+                f"Credibility Weight: {source.credibility_score:.1f} · "
+                f"Independent Domain: {'Yes' if source.is_independent else 'No (Duplicate)'} · "
+                f"Freshness: {source.freshness_score:.0%}"
             )
-            if not verification.sources:
-                st.info("None of the searched article titles matched this claim closely enough.")
-            for source in verification.sources:
-                with st.expander(source.title, expanded=False):
-                    st.caption(
-                        " · ".join(
-                            value
-                            for value in (source.publisher, source.published_at)
-                            if value
-                        )
-                    )
-                    if source.snippet:
-                        st.write(source.snippet)
+            st.caption(
+                f"Entity match: {source.entity_score:.0%} · "
+                f"Event match: {source.event_score:.0%} · "
+                f"Overall relevance: {source.similarity_score:.0%}"
+            )
+            st.caption(f"Accepted because: {source.acceptance_reason}")
 
-                    st.link_button("Open source article", source.url)
-                    st.caption(
-                        f"Entity match: {source.entity_score:.0%} · "
-                        f"Event match: {source.event_score:.0%} · "
-                        f"Overall relevance: {source.similarity_score:.0%}"
-                    )
-                    
-                    # Evidence Engine Details
-                    stance_color = {"SUPPORTS": "green", "CONTRADICTS": "red", "NEUTRAL": "blue"}.get(source.stance, "gray")
-                    st.markdown(f"**Stance:** :{stance_color}[{source.stance}]")
-                    st.caption(
-                        f"Credibility Weight: {source.credibility_score:.1f} · "
-                        f"Independent Domain: {'Yes' if source.is_independent else 'No (Duplicate)'}"
-                    )
-                    
-                    st.caption(f"Accepted because: {source.acceptance_reason}")
+            st.link_button("Open source article", source.url)
 
-                    if source.prediction is not None:
-                        st.info(
-                            f"Article ML Result: {source.prediction.label} "
-                            f"({source.prediction.confidence:.1%} confidence)"
-                        )
-                    else:
-                        st.info("Article not analyzed: readable text was unavailable.")
+            if source.prediction is not None:
+                st.info(
+                    f"Article ML Result: {source.prediction.label} "
+                    f"({source.prediction.confidence:.1%} confidence)"
+                )
+            else:
+                st.info("Article not analyzed: readable text was unavailable.")
+
+    # ---- Save to local history (best effort) ----
+    try:
+        save_prediction(
+            mode="Online",
+            input_text=clean_headline,
+            prediction=label,
+            confidence=confidence,
+            sources_found=verification.sources_found,
+            articles_analyzed=verification.articles_analyzed,
+        )
+    except HistoryDatabaseError:
+        st.warning("Verification completed, but it could not be saved to local history.")

@@ -35,7 +35,7 @@ class HistoryRecord:
             "Prediction": self.prediction,
             "Confidence": f"{self.confidence:.1%}" if self.confidence is not None else "—",
             "Sources": str(self.sources_found) if self.sources_found is not None else "—",
-            "Analyzed": str(self.articles_analyzed)
+            "Full reads": str(self.articles_analyzed)
             if self.articles_analyzed is not None
             else "—",
         }

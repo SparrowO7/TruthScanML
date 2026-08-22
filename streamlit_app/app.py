@@ -2,6 +2,8 @@
 
 import streamlit as st
 
+from ui.theme import inject_theme
+
 
 st.set_page_config(
     page_title="AI-Powered Fake News Detection",
@@ -9,6 +11,8 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+inject_theme()
 
 st.title("AI-Powered Fake News Detection")
 st.caption("Offline & Online News Verification using Machine Learning")
@@ -23,7 +27,7 @@ offline_column, online_column = st.columns(2, gap="large")
 
 with offline_column:
     with st.container(border=True):
-        st.markdown("#### Offline Prediction")
+        st.markdown("#### 📝 Offline Prediction")
         st.write(
             "Paste news text to receive a local prediction using the existing "
             "TF-IDF and Logistic Regression pipeline."
@@ -38,12 +42,13 @@ with offline_column:
 
 with online_column:
     with st.container(border=True):
-        st.markdown("#### Online Verification")
+        st.markdown("#### 🔗 Online Verification")
         st.write(
-            "Enter a headline. The application searches DuckDuckGo, extracts "
-            "matching article text, and evaluates it with the same saved model."
+            "Enter a headline. The application searches free news sources, "
+            "extracts matching articles, checks professional fact-check "
+            "databases, and produces a weighted evidence verdict."
         )
-        st.caption("Only this mode needs a network connection.")
+        st.caption("Only this mode needs a network connection. No paid APIs.")
         st.page_link(
             "pages/2_Online_Verification.py",
             label="Open Online Verification",
@@ -73,9 +78,13 @@ st.write(
     "Verification, Prediction History, or About Model."
 )
 
-with st.expander("Milestone 1 status", expanded=False):
+with st.expander("How Online Verification works", expanded=False):
     st.write(
-        "Offline Prediction and Online Verification both use the unchanged saved "
-        "model and TF-IDF vectorizer. Prediction History is stored locally with "
-        "SQLite."
+        "The system does not depend on a generative AI for its verdict. It "
+        "searches multiple independent sources (DuckDuckGo → Bing News → "
+        "Google News → GDELT), extracts evidence, evaluates source "
+        "credibility, freshness and stance, optionally consults professional "
+        "fact-check databases, and produces a weighted consensus. When "
+        "evidence is insufficient or conflicting, it returns Inconclusive "
+        "instead of forcing a verdict."
     )

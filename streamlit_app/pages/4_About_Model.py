@@ -2,8 +2,12 @@
 
 import streamlit as st
 
+from ui.theme import inject_theme
+
 
 st.set_page_config(page_title="About Model", page_icon="ℹ️", layout="wide")
+
+inject_theme()
 
 st.title("About the Model")
 st.caption("The established machine-learning pipeline behind each prediction.")

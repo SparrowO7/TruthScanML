@@ -11,10 +11,12 @@ use the same saved TF-IDF vectorizer and Logistic Regression model.
 
 - **Offline Prediction** — paste news text and classify it locally as Real or
   Fake using the saved ML pipeline.
-- **Online Verification** — enter a headline; the app searches public news
-  results, extracts readable articles, and reports source-model consensus.
+- **Online Verification** — enter a headline; the app searches free news
+  sources, extracts readable articles, weighs evidence, and returns a
+  **Real / Fake / Inconclusive** consensus. Fully free — no paid APIs and no
+  generative-AI verdicts.
 - **Prediction History** — stores compact local records in SQLite; no database
-  server or API key is required.
+  server required.
 - **FastAPI reference API** — retained unchanged for backend demonstration.
 
 ## Project structure
@@ -25,8 +27,13 @@ model/                       # Existing saved model and TF-IDF vectorizer
 streamlit_app/
 ├── app.py                   # Streamlit home page
 ├── pages/                   # Offline, Online, History, About pages
-├── services/                # Read-only ML inference and online verification
-├── utils/                   # Matching text preprocessing
+├── services/                # ML inference, search, evidence & consensus engine
+│   ├── online_verification.py   # Search chain + stance + consensus
+│   ├── factcheck.py             # Optional Google Fact Check (ClaimReview)
+│   ├── wikipedia.py             # Conservative death-claim cross-check
+│   └── relevance.py             # Claim↔title relevance scoring
+├── ui/                      # Shared animated glass theme
+├── utils/                   # Matching text preprocessing + HTTP retry
 ├── database/                # SQLite history helper
 └── data/                    # Generated local database (ignored by Git)
 ```
@@ -36,7 +43,7 @@ streamlit_app/
 Use the existing project virtual environment:
 
 ```cmd
-cd C:\Users\Harsh Tiwari\TestClone
+cd C:\Users\Harsh Tiwari\Desktop\TC
 venv\Scripts\python.exe -m pip install -r requirements.txt
 venv\Scripts\python.exe -m streamlit run streamlit_app\app.py
 ```
@@ -61,15 +68,86 @@ The prediction endpoint is `POST /predict` with this body:
 
 ## Online-verification design
 
-Online Verification does not use an LLM, paid API, or API key:
+Online Verification is completely free: it uses no LLM, no paid API, and no
+API key by default.
 
 ```text
-Headline → public news search → article extraction → existing ML model
+                 NEWS CLAIM
+                     │
+        ┌────────────▼──────────────────┐
+        │ Search Layer (keyless)        │
+        │ DDG → Bing → Google → GDELT   │
+        └────────────┬──────────────────┘
+                     ▼
+             Relevant Articles (entity/event relevance filter)
+                     │
+        ┌────────────▼─────────────┐
+        │ Evidence Engine          │
+        │ • Stance (SUPPORTS/      │
+        │   CONTRADICTS/NEUTRAL)   │
+        │ • Negation guard         │
+        │ • Credibility weighting  │
+        │ • Freshness scoring      │
+        │ • Parallel fetching      │
+        └────────────┬─────────────┘
+                     ▼
+        ┌──────────────────────────┐
+        │ Fact Check Database      │
+        │ (ClaimReview, optional)  │
+        └────────────┬─────────────┘
+                     ▼
+        ┌──────────────────────────┐
+        │ Special Checks           │
+        │ • Death (incl. Wikipedia)│
+        │ • Location contradiction │
+        │ • Scientific claims      │
+        │ • Hindi/Hinglish terms   │
+        └────────────┬─────────────┘
+                     ▼
+              FINAL CONSENSUS
+          ↙        ↓         ↘
+       REAL      FAKE     INCONCLUSIVE
 ```
 
+The system does not depend on a generative AI for its verdict. It searches
+multiple independent sources, extracts evidence, evaluates source credibility,
+freshness and stance, optionally consults existing professional fact-checks,
+and then produces a weighted consensus. If evidence is insufficient or
+conflicting, it returns **Inconclusive** instead of forcing a call.
+
 Search providers and news websites can rate-limit requests, block automation,
-or return inaccessible pages. Therefore online results are supporting signals,
+or return inaccessible pages. Online results are therefore supporting signals,
 not factual proof. Offline Prediction remains independent of internet access.
+
+### Optional: Google Fact Check Tools (free)
+
+Professional fact-check verdicts (Alt News, BOOM, Vishvas News, PolitiFact,
+Snopes, …) are queried through Google's free Fact Check Tools API. This layer
+is optional: without a key the app skips it and everything else still works.
+
+1. Create a free API key: <https://developers.google.com/fact-check/tools/api>
+2. Copy the tracked example file to the ignored secrets file:
+
+   ```cmd
+   copy .streamlit\secrets.example.toml .streamlit\secrets.toml
+   ```
+
+3. Edit `.streamlit/secrets.toml`:
+
+   ```toml
+   FACT_CHECK_API_KEY = "your-free-key"
+   ```
+
+For Streamlit Community Cloud, open the app's **Settings → Secrets** and add
+the same line. Never commit or paste real keys into source code, GitHub,
+screenshots, or chats.
+
+### Wikipedia cross-check (automatic)
+
+For death claims ("X died / X mar gaye / X ka dehant"), the app performs one
+conservative Wikipedia check: an explicit death statement in the lead supports
+the claim, a present-tense biography contradicts it, and anything else stays
+neutral. Wikipedia is only ever one evidence source.
 
 ## SQLite history
 
@@ -85,7 +163,7 @@ deployment instance running the app.
 
 ## Deploy to Streamlit Community Cloud
 
-1. Commit and push the `streamlit-upgrade` branch to GitHub.
+1. Commit and push the `main` branch to GitHub.
 2. Open [Streamlit Community Cloud](https://share.streamlit.io/) and choose
    **Create app**.
 3. Select the GitHub repository and branch.
@@ -94,8 +172,9 @@ deployment instance running the app.
 6. Deploy and inspect the build logs.
 
 `requirements.txt` is at repository root and `.streamlit/config.toml` provides
-the app theme. Streamlit Cloud's filesystem is ephemeral, so SQLite history may
-reset on redeploy or restart; that is expected for this local-history feature.
+the dark glass app theme. Streamlit Cloud's filesystem is ephemeral, so SQLite
+history may reset on redeploy or restart; that is expected for this
+local-history feature.
 
 ## Model integrity
 

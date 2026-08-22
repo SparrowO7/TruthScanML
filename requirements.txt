@@ -22,3 +22,6 @@ threadpoolctl==3.6.0
 typing-inspection==0.4.2
 typing_extensions==4.15.0
 uvicorn==0.49.0
+# Optional: local NLI stance assist (~100 MB model, no API cost).
+# The app runs fine without it — the feature silently disables itself.
+sentence-transformers>=3.0

@@ -1,2 +1,9 @@
 [client]
 toolbarMode = "auto"
+
+[theme]
+base = "dark"
+primaryColor = "#818cf8"
+backgroundColor = "#0b1020"
+secondaryBackgroundColor = "#11162b"
+textColor = "#e6e9f5"

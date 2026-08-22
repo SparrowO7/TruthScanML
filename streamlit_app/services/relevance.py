@@ -21,14 +21,21 @@ STOP_WORDS = {
 }
 
 EVENT_GROUPS = {
-    # Expanded death group to also accept alive signals so debunking articles aren't discarded
-    "death": {"dead", "died", "dies", "death", "killed", "murdered", "passed away", "alive", "safe", "well", "hoax", "rumour", "rumor"},
-    "arrest": {"arrested", "arrest", "detained", "custody", "released"},
-    "resignation": {"resigns", "resigned", "resignation", "steps down"},
-    "election": {"wins", "won", "elected", "election", "vote", "appointed"},
-    "disaster": {"earthquake", "flood", "fire", "cyclone", "explosion", "crash", "accident"},
-    "ban": {"banned", "ban", "prohibited"},
-    "launch": {"launched", "launch", "launched", "liftoff", "mission", "deployed"},
+    # Expanded death group to also accept alive signals so debunking articles aren't discarded.
+    # Hindi/Hinglish variants (dehant, swargwasi, inteqal, wafat…) included.
+    "death": {"dead", "died", "dies", "death", "killed", "murdered", "passed away",
+              "alive", "safe", "well", "hoax", "rumour", "rumor",
+              "dehant", "swargwasi", "swargwas", "inteqal", "wafat",
+              "mar gaya", "mar gaye", "nahi rahe", "gujar gaye", "guzar gaye"},
+    "arrest": {"arrested", "arrest", "detained", "custody", "released",
+               "girftar", "giraftaar", "hua giraftaar"},
+    "resignation": {"resigns", "resigned", "resignation", "steps down", "istifa"},
+    "election": {"wins", "won", "elected", "election", "vote", "appointed",
+                 "jeeta", "jeet", "chune gaye", "vote diya"},
+    "disaster": {"earthquake", "flood", "fire", "cyclone", "explosion", "crash",
+                 "accident", "bhukamp", "baadh", "toofan", "dhamaka", "durghatna"},
+    "ban": {"banned", "ban", "prohibited", "pabandi", "pratibandh"},
+    "launch": {"launched", "launch", "liftoff", "mission", "deployed", "udan"},
 }
 GENERIC_CAPITAL_WORDS = {"former", "indian", "prime", "president", "minister"}
 THRESHOLDS = {"entity_only": 0.40, "entity_event": 0.60, "general": 0.45}
@@ -134,7 +141,7 @@ def _normalize(text: str) -> str:
     text = re.sub(r"\bpm\b", "prime minister", text)
     # Map non-standard death phrases to ensure event detection catches them
     text = re.sub(
-        r"\b(died|dies|death|killed|passed away|no\s+more|is\s+no\s+more|nahi\s+rahe|gujar\s+gaye|mar\s+gaye)\b",
+        r"\b(died|dies|death|killed|passed away|no\s+more|is\s+no\s+more|nahi\s+rahe|gujar\s+gaye|guzar\s+gaye|mar\s+gaya|mar\s+gaye|inteqal|wafat)\b",
         "dead",
         text
     )
