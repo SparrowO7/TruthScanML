@@ -12,6 +12,7 @@ the evidence engine falls back to its pattern-based behaviour.
 
 from functools import lru_cache
 
+import numpy as np
 import streamlit as st
 
 
@@ -63,12 +64,47 @@ def _label_order(model) -> list[str]:
         return _DEFAULT_LABELS
 
 
+def _to_probabilities(row) -> list[float] | None:
+    """Convert one model-output row into valid probabilities.
+
+    Root cause of the old ">100%" bug: sentence-transformers CrossEncoder
+    uses Identity activation when num_labels > 1, so ``predict()`` returns
+    raw logits for 3-class NLI models. A raw logit can be any float (1.36
+    → "136%"). The correct fix is a softmax over the logits — NOT clamping.
+
+    If the row is already a valid probability distribution (every value in
+    [0, 1] and summing to ≈1), it is passed through unchanged so this stays
+    correct for models/activations that do return probabilities.
+    """
+
+    try:
+        values = np.asarray(list(map(float, row)), dtype=float)
+    except (TypeError, ValueError):
+        return None
+
+    if values.size == 0:
+        return None
+
+    total = float(values.sum())
+    looks_like_probabilities = bool(
+        np.all(values >= 0.0) and np.all(values <= 1.0) and 0.99 <= total <= 1.01
+    )
+    if looks_like_probabilities:
+        return values.tolist()
+
+    # Raw logits -> numerically stable softmax.
+    shifted = values - values.max()
+    exponentials = np.exp(shifted)
+    return (exponentials / exponentials.sum()).tolist()
+
+
 def score_pairs(pairs: list[tuple[str, str]]) -> list[tuple[str | None, float]]:
     """Score (claim, evidence) pairs.
 
     Returns one ``(stance, score)`` per pair where stance is
     "SUPPORTS" / "CONTRADICTS" / "NEUTRAL" and score is that label's
-    probability. Pairs get ``(None, 0.0)`` when the model is unavailable.
+    softmax probability in [0, 1]. Pairs get ``(None, 0.0)`` when the model
+    is unavailable.
     """
 
     if not pairs:
@@ -86,9 +122,8 @@ def score_pairs(pairs: list[tuple[str, str]]) -> list[tuple[str | None, float]]:
     labels = _label_order(model)
     results: list[tuple[str | None, float]] = []
     for row in scores:
-        try:
-            probabilities = list(map(float, row))
-        except (TypeError, ValueError):
+        probabilities = _to_probabilities(row)
+        if probabilities is None:
             results.append((None, 0.0))
             continue
         best_index = probabilities.index(max(probabilities))
