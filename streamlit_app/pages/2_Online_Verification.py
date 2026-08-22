@@ -108,6 +108,15 @@ if st.button("Search and analyze", type="primary"):
         )
         st.stop()
 
+    # If NLI was requested but could not load in this app process, say so
+    # right where the user is looking for the brain chips.
+    if st.session_state.nli_enabled and not nli_ready:
+        st.warning(
+            "🧠 NLI did not run — this app process cannot load the model. "
+            "Close every Streamlit window/process and start the app with "
+            "`run_app.bat` (project root)."
+        )
+
     label = verification.consensus_label or "Inconclusive"
     confidence = verification.consensus_confidence
 
