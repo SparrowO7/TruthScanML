@@ -1,8 +1,9 @@
-"""Online Verification — colorful verdict UI on the evidence engine."""
+"""Online Verification - colorful verdict UI on the evidence engine."""
 
 import streamlit as st
 
 from database.history import HistoryDatabaseError, save_prediction
+from services.nli_stance import nli_available
 from services.online_verification import (
     NewsSearchError,
     build_search_query,
@@ -24,9 +25,10 @@ st.warning(
     "Offline Prediction remains available when the internet is unavailable."
 )
 st.caption(
-    "Free search chain: DuckDuckGo → Bing News → Google News → GDELT, with "
-    "parallel article extraction, professional fact-check lookup, and an "
-    "optional local NLI model for stance assistance."
+    "Free search providers rotate per request (DDG -> Bing -> Google) so no "
+    "single one hits its rate limit, with GDELT as the final fallback. "
+    "Articles are extracted in parallel, plus professional fact-check lookup "
+    "and an optional local NLI model for stance assistance."
 )
 
 if "fast_mode" not in st.session_state:
@@ -37,6 +39,21 @@ fast = st.checkbox(
     help="Analyse only titles and snippets. Instant, but less thorough.",
 )
 st.session_state.fast_mode = fast
+
+# Always visible NLI status - the brain chip previously vanished silently
+# when the optional model was not installed, which looked like a bug.
+try:
+    nli_on = nli_available()
+except Exception:
+    nli_on = False
+st.caption(
+    "🧠 NLI assist: "
+    + (
+        "active (local model loaded)"
+        if nli_on
+        else "off - install with `venv\\Scripts\\pip install sentence-transformers` to enable"
+    )
+)
 
 headline = st.text_input(
     "News headline or claim",
@@ -52,10 +69,10 @@ if st.button("Search and analyze", type="primary"):
 
     try:
         with st.status(
-            f"Verifying: “{build_search_query(clean_headline)}”…", expanded=True
+            f"Verifying: {build_search_query(clean_headline)}...", expanded=True
         ) as status:
-            st.write("🔎 Searching news providers (DuckDuckGo → Bing → Google → GDELT)…")
-            st.write("🧹 Filtering results relevant to your claim…")
+            st.write("🔎 Searching news providers (rotating: DDG / Bing / Google)...")
+            st.write("🧹 Filtering results relevant to your claim...")
             verification = verify_headline(
                 clean_headline, fast_mode=st.session_state.fast_mode
             )
@@ -63,9 +80,14 @@ if st.button("Search and analyze", type="primary"):
                 f"📰 {verification.search_results_found} results found, "
                 f"{verification.sources_found} relevant sources."
             )
-            st.write("🧠 Checking stances, credibility and freshness…")
-            st.write("🧮 Aggregating consensus…")
-            status.update(label="Verification complete", state="complete", expanded=False)
+            if st.session_state.fast_mode:
+                st.write("⚡ Fast mode: analyzing titles and snippets...")
+            else:
+                st.write("⬇️ Downloading and analyzing articles in parallel...")
+            st.write("🧠 Checking stances, credibility and freshness...")
+            st.write("⚖️ Weighing evidence and source trust...")
+            st.write("🧮 Aggregating consensus...")
+            status.update(label="✅ Verification complete", state="complete", expanded=False)
     except NewsSearchError as error:
         st.error(str(error))
         st.stop()
@@ -103,7 +125,7 @@ if st.button("Search and analyze", type="primary"):
     else:
         st.info("### ⚖️ Verdict: Inconclusive")
 
-    # ---- Why? — glass ring card + evidence summary ----
+    # ---- Why? - glass ring card + evidence summary ----
     if verification.has_sufficient_relevant_sources or verification.evidence_summary:
         st.markdown("#### Why?")
         if confidence is not None:
@@ -132,7 +154,7 @@ if st.button("Search and analyze", type="primary"):
         st.caption(
             "Stance counts cover every relevant source (snippets included). "
             "'Articles analyzed' counts pages downloaded and run through the "
-            "ML model — a lower number means some sites blocked automated reading."
+            "ML model - a lower number means some sites blocked automated reading."
         )
 
     # ---- Professional fact-checks (ClaimReview) ----

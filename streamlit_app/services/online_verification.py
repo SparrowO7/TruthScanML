@@ -392,62 +392,71 @@ def _lookup_fact_checks(headline: str) -> tuple[FactCheckVerdict, ...]:
 # Search: DuckDuckGo → Bing News RSS → Google News RSS
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Search: rotating provider order (round-robin across requests) so no single
+# free provider eats every request and hits its rate limit quickly.
+# Request 1 → DDG first, request 2 → Bing first, request 3 → Google first,
+# then repeat. Within one request the remaining providers are still tried as
+# fallbacks, with GDELT always as the last resort.
+# ---------------------------------------------------------------------------
+
+_next_provider = {"index": 0}
+
+
+def _search_via_ddg(query: str) -> list[dict[str, str]]:
+    """DuckDuckGo via ddgs: explicit backend, then the auto fallback."""
+
+    try:
+        results = DDGS().news(
+            query=query, max_results=MAX_SEARCH_RESULTS, backend="duckduckgo"
+        )
+    except Exception:
+        results = []
+    if not results:
+        try:
+            results = DDGS().news(
+                query=query, max_results=MAX_SEARCH_RESULTS, backend="auto"
+            )
+        except Exception:
+            results = []
+    return results
+
+
+def _rotated_search_order() -> tuple:
+    """Return (providers in rotated order) + GDELT as the final fallback."""
+
+    providers = (_search_via_ddg, search_bing_news_rss, search_google_news_rss)
+    start = _next_provider["index"] % len(providers)
+    _next_provider["index"] += 1
+    rotated = providers[start:] + providers[:start]
+    return rotated + (search_gdelt,)
+
+
 @st.cache_data(ttl=600, show_spinner=False)
 def search_news(headline: str) -> tuple[SourceResult, ...]:
-    """Find up to twenty public news results for a headline without an API key."""
+    """Find up to twenty public news results for a headline without an API key.
+
+    Providers rotate per request (DDG → Bing → Google → …) to spread load;
+    whichever provider is chosen first, the others still act as in-request
+    fallbacks, ending with GDELT.
+    """
 
     query = build_search_query(headline)
 
-    # 1. DuckDuckGo via ddgs, explicit backend first.
-    try:
-        raw_results = DDGS().news(
-            query=query,
-            max_results=MAX_SEARCH_RESULTS,
-            backend="duckduckgo",
-        )
-    except Exception:
-        raw_results = []
-
-    # 2. ddgs automatic backend (extra providers, still keyless).
-    if not raw_results:
+    raw_results: list[dict[str, str]] = []
+    for provider in _rotated_search_order():
         try:
-            raw_results = DDGS().news(
-                query=query,
-                max_results=MAX_SEARCH_RESULTS,
-                backend="auto",
-            )
+            raw_results = provider(query)
         except Exception:
             raw_results = []
-
-    # 3. Bing News RSS.
-    if not raw_results:
-        try:
-            raw_results = search_bing_news_rss(query)
-        except Exception:
-            raw_results = []
-
-    # 4. Google News RSS.
-    if not raw_results:
-        try:
-            raw_results = search_google_news_rss(query)
-        except Exception:
-            raw_results = []
-
-    # 5. GDELT DOC 2.0 (global, multilingual, keyless).
-    if not raw_results:
-        try:
-            raw_results = search_gdelt(query)
-        except Exception as error:
-            raise NewsSearchError(
-                "Free news-search providers are temporarily unavailable or "
-                "rate-limiting requests. Your ML model is fine. Wait a few "
-                "minutes, then try again."
-            ) from error
+        if raw_results:
+            break
 
     if not raw_results:
         raise NewsSearchError(
-            "No live news results were returned for this headline. Try a more "
-            "specific, current headline or try again later."
+            "Free news-search providers are temporarily unavailable or "
+            "rate-limiting requests. Your ML model is fine. Wait a few "
+            "minutes, then try again."
         )
 
     sources: list[SourceResult] = []
