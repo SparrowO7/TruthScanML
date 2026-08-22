@@ -120,10 +120,19 @@ def evaluate_claim_match(claim: str, article_title: str) -> ClaimMatch:
 
     if has_event(claim):
         claim_type = "entity_event"
+        # Strong entity + strong event means the same story even when the
+        # overall lexical similarity sits below the generic threshold.
         accepted = (
-            entity_score > 0
-            and event_score > 0
-            and overall_score >= THRESHOLDS[claim_type]
+            (
+                entity_score >= 0.5
+                and event_score >= 0.5
+                and overall_score >= 0.45
+            )
+            or (
+                entity_score > 0
+                and event_score > 0
+                and overall_score >= THRESHOLDS[claim_type]
+            )
         )
         reason = "Matching entity and event" if accepted else "Entity, event, or relevance did not match"
     elif is_entity_only_claim(claim):
