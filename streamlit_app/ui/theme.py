@@ -308,6 +308,15 @@ h1 { font-weight: 700; letter-spacing: -0.015em; color: var(--ts-text); }
 
 [data-testid="stExpander"] details { background: transparent !important; }
 
+/* Expander titles must show in full — Streamlit truncates them with "…" */
+[data-testid="stExpanderSummary"] p,
+[data-testid="stExpander"] summary span,
+[data-testid="stExpanderSummary"] div {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+}
+
 [data-testid="stAlert"] { border-radius: 16px; }
 
 [data-testid="stDataFrame"], [data-testid="stTable"] {

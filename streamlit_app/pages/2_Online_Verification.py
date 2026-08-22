@@ -75,10 +75,10 @@ if st.button("Search and analyze", type="primary"):
 
     try:
         with st.status(
-            f"Verifying: {build_search_query(clean_headline)}...", expanded=True
+            f"Verifying: {build_search_query(clean_headline)}", expanded=True
         ) as status:
-            st.write("🔎 Searching news providers (rotating: DDG / Bing / Google)...")
-            st.write("🧹 Filtering results relevant to your claim...")
+            st.write("🔎 Searching news providers (rotating: DDG / Bing / Google)")
+            st.write("🧹 Filtering results relevant to your claim")
             verification = verify_headline(
                 clean_headline,
                 fast_mode=st.session_state.fast_mode,
@@ -86,17 +86,17 @@ if st.button("Search and analyze", type="primary"):
             )
             st.write(
                 f"📰 {verification.search_results_found} results found, "
-                f"{verification.sources_found} relevant sources."
+                f"{verification.sources_found} relevant sources"
             )
             if st.session_state.fast_mode:
-                st.write("⚡ Fast mode: analyzing titles and snippets...")
+                st.write("⚡ Fast mode: analyzing titles and snippets")
             else:
-                st.write("⬇️ Downloading and analyzing articles in parallel...")
+                st.write("⬇️ Downloading and analyzing articles in parallel")
             if st.session_state.nli_enabled and nli_ready:
-                st.write("🧠 NLI comparing claim meaning against sources...")
-            st.write("🧠 Checking stances, credibility and freshness...")
-            st.write("⚖️ Weighing evidence and source trust...")
-            st.write("🧮 Aggregating consensus...")
+                st.write("🧠 NLI comparing claim meaning against sources")
+            st.write("🧠 Checking stances, credibility and freshness")
+            st.write("⚖️ Weighing evidence and source trust")
+            st.write("🧮 Aggregating consensus")
             status.update(label="✅ Verification complete", state="complete", expanded=False)
     except NewsSearchError as error:
         st.error(str(error))
