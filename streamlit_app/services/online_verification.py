@@ -559,8 +559,8 @@ def search_gdelt(query: str) -> list[dict[str, str]]:
             "sort": "DateDesc",
         },
         headers=HTTP_HEADERS,
-        timeout=12,
-        retries=2,
+        timeout=8,
+        retries=1,
     )
 
     data = response.json()

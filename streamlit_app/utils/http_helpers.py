@@ -9,30 +9,33 @@ from typing import Any, Dict, Optional
 def http_get_with_retry(
     url: str,
     *,
+    params: Optional[Dict[str, str]] = None,
     headers: Optional[Dict[str, str]] = None,
     timeout: int = 10,
     retries: int = 3,
     backoff_factor: float = 0.5,
 ) -> requests.Response:
-    """Perform a GET request with exponential back‑off.
+    """Perform a GET request with exponential back-off.
 
     Parameters
     ----------
     url: str
         Target URL.
+    params: dict | None
+        Optional query-string parameters forwarded to requests.
     headers: dict | None
         Optional HTTP headers.
     timeout: int
         Socket timeout in seconds.
     retries: int
-        Number of attempts (first attempt + ``retries``‑1 retries).
+        Number of attempts (first attempt + ``retries``-1 retries).
     backoff_factor: float
         Base delay in seconds; the actual wait is ``backoff_factor * (2 ** attempt)``.
     """
     attempt = 0
     while True:
         try:
-            response = requests.get(url, headers=headers, timeout=timeout)
+            response = requests.get(url, params=params, headers=headers, timeout=timeout)
             response.raise_for_status()
             return response
         except (requests.RequestException, requests.HTTPError) as exc:
