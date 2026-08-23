@@ -34,16 +34,25 @@ if "fast_mode" not in st.session_state:
     st.session_state.fast_mode = False
 if "nli_enabled" not in st.session_state:
     st.session_state.nli_enabled = True
+if "groq_enabled" not in st.session_state:
+    st.session_state.groq_enabled = True
 
-# Both controls on one row: fast mode (left) and NLI assist (right).
-options_left, options_right = st.columns([3, 2])
-with options_left:
+# Controls on one row: fast mode | NLI assist | Groq AI check.
+try:
+    groq_key = st.secrets.get("GROQ_API_KEY", "")
+    groq_model = st.secrets.get("GROQ_MODEL", "openai/gpt-oss-120b")
+except Exception:
+    groq_key, groq_model = "", "openai/gpt-oss-120b"
+groq_ready = groq_configured(groq_key)
+
+col_fast, col_nli, col_groq = st.columns([5, 2, 3])
+with col_fast:
     fast = st.checkbox(
         "⚡ Fast keyword-only check (skip full article download)",
         value=st.session_state.fast_mode,
         help="Analyse only titles and snippets. Instant, but less thorough.",
     )
-with options_right:
+with col_nli:
     nli_toggle = st.toggle(
         "🧠 NLI assist",
         value=st.session_state.nli_enabled,
@@ -51,8 +60,17 @@ with options_right:
         "article. Adds a few seconds on first use; the toggle disables it "
         "without uninstalling anything.",
     )
+with col_groq:
+    groq_toggle = st.toggle(
+        "🤖 AI check (Groq)",
+        value=st.session_state.groq_enabled,
+        help="When ON, an independent open-source LLM (Groq, free) checks the "
+        "claim right after the evidence verdict. Google professional "
+        "fact-checks run automatically when their free key is configured.",
+    )
 st.session_state.fast_mode = fast
 st.session_state.nli_enabled = nli_toggle
+st.session_state.groq_enabled = groq_toggle
 
 # Silent availability check (no status line on the page).
 try:
@@ -72,6 +90,7 @@ if st.button("Search and analyze", type="primary"):
         st.warning("Enter a more specific headline or claim before searching.")
         st.stop()
 
+    groq_opinion = None
     try:
         with st.status(
             f"Verifying: {build_search_query(clean_headline)}", expanded=True
@@ -102,6 +121,21 @@ if st.button("Search and analyze", type="primary"):
             st.write("🧠 Checking stances, credibility and freshness")
             st.write("⚖️ Weighing evidence and source trust")
             st.write("🧮 Aggregating consensus")
+            if st.session_state.groq_enabled and groq_ready:
+                st.write("🤖 Asking Groq for an independent second opinion")
+                try:
+                    groq_opinion = cross_check_claim(
+                        claim=clean_headline,
+                        api_key=groq_key,
+                        reference_sources=[(s.title, s.url) for s in verification.sources],
+                        model=groq_model,
+                    )
+                    st.write(
+                        f"🤖 Groq opinion: {groq_opinion.verdict} "
+                        f"({groq_opinion.confidence} confidence)"
+                    )
+                except GroqCrossCheckError as groq_error:
+                    st.write(f"🤖 Groq skipped: {groq_error}")
             status.update(label="✅ Verification complete", state="complete", expanded=False)
     except NewsSearchError as error:
         st.error(str(error))
@@ -251,45 +285,27 @@ if st.button("Search and analyze", type="primary"):
             else:
                 st.info("Article not analyzed: readable text was unavailable.")
 
-    # ---- Optional free AI second opinion (Groq) — never affects the verdict ----
-    try:
-        groq_key = st.secrets.get("GROQ_API_KEY", "")
-        groq_model = st.secrets.get("GROQ_MODEL", "openai/gpt-oss-120b")
-    except Exception:
-        groq_key, groq_model = "", "openai/gpt-oss-120b"
-
-    if groq_configured(groq_key):
-        with st.expander("🤖 AI second opinion (Groq, free) — optional", expanded=False):
+    # ---- Groq AI second opinion (auto, toggle-controlled) ----
+    if st.session_state.groq_enabled and groq_opinion is not None:
+        color = {
+            "SUPPORTED": "green",
+            "CONTRADICTED": "red",
+        }.get(groq_opinion.verdict, "blue")
+        with st.container(border=True):
+            st.markdown("#### 🤖 AI second opinion (Groq)")
             st.caption(
-                "Asks an independent open-source LLM (via Groq's free tier) to "
-                "assess the claim using the found article titles. This is a "
-                "separate opinion — it is NOT part of the verdict above."
+                "Independent open-source LLM opinion — this is NOT part of "
+                "the evidence verdict above."
             )
-            if st.button("Run AI cross-check", key="groq_crosscheck"):
-                reference = [
-                    (s.title, s.url) for s in verification.sources
-                ]
-                try:
-                    with st.spinner("Groq is assessing the claim..."):
-                        opinion = cross_check_claim(
-                            claim=clean_headline,
-                            api_key=groq_key,
-                            reference_sources=reference,
-                            model=groq_model,
-                        )
-                except GroqCrossCheckError as error:
-                    st.error(str(error))
-                else:
-                    color = {
-                        "SUPPORTED": "green",
-                        "CONTRADICTED": "red",
-                    }.get(opinion.verdict, "blue")
-                    st.markdown(
-                        f"**AI opinion:** :{color}[{opinion.verdict}] "
-                        f"(confidence: {opinion.confidence})"
-                    )
-                    st.write(opinion.summary)
-                    st.caption(f"Model: {opinion.model} · cached for 15 minutes")
+            st.markdown(
+                f"**Groq says:** :{color}[{groq_opinion.verdict}] "
+                f"(confidence: {groq_opinion.confidence})"
+            )
+            st.write(groq_opinion.summary)
+            st.caption(
+                f"Model: {groq_opinion.model} · Google professional fact-checks "
+                f"appear above when their database has this claim"
+            )
 
     # ---- Save to local history (best effort) ----
     try:
