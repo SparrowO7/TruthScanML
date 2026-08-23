@@ -140,11 +140,13 @@ if st.button("Search and analyze", type="primary"):
     except NewsSearchError as error:
         st.error(str(error))
         st.stop()
-    except Exception:
+    except Exception as error:
         st.error(
             "Online verification could not be completed. Offline Prediction "
             "and the saved model are unaffected."
         )
+        with st.expander("Technical details (for debugging)"):
+            st.exception(error)
         st.stop()
 
     # If NLI was requested but could not load in this app process, say so
